@@ -1,0 +1,48 @@
+# HTTP server block
+server {
+    listen 80;
+    server_name 45.33.87.204 health.networks.howard.edu www.health.networks.howard.edu;
+    
+    root /var/www/html;
+    index index.html;
+    
+    location /api/ {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# HTTPS server block
+server {
+    listen 443 ssl;
+    server_name health.networks.howard.edu www.health.networks.howard.edu;
+
+    ssl_certificate /etc/letsencrypt/live/health.networks.howard.edu/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/health.networks.howard.edu/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    root /var/www/html;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
