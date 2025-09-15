@@ -17,11 +17,9 @@ const PhoneVerification: React.FC = () => {
   const [verificationError, setVerificationError] = useState('');
 
   const [showUsedModal, setShowUsedModal] = useState(false);
-  const [usedMessage, setUsedMessage] = useState('');
   const [resendResult, setResendResult] = useState('');
 
   const [assignedLink, setAssignedLink] = useState('');
-  const [showEmailSentModal, setShowEmailSentModal] = useState(false);
 
   // Loading indicator state
   const [isLoading, setIsLoading] = useState(false);
@@ -488,7 +486,7 @@ const PhoneVerification: React.FC = () => {
                           </svg>
                         </div>
                         <div className="ml-3">
-                          <p className="text-sm text-yellow-700">{usedMessage}</p>
+                          <p className="text-sm text-yellow-700">This phone number has already been used for verification.</p>
                         </div>
                       </div>
                     </div>

@@ -31,9 +31,6 @@ const Survey: React.FC = () => {
   // ----------------------
   // Validation helpers
   // ----------------------
-  const formatPhoneNumber = (num: string) => {
-    return num.replace(/\D/g, '');
-  };
 
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');

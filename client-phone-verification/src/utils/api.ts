@@ -58,7 +58,7 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        (headers as any)['Authorization'] = `Bearer ${token}`;
       }
     }
     
@@ -78,7 +78,7 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        (headers as any)['Authorization'] = `Bearer ${token}`;
       }
     }
     
@@ -100,7 +100,7 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        (headers as any)['Authorization'] = `Bearer ${token}`;
       }
     }
     
@@ -119,7 +119,7 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        (headers as any)['Authorization'] = `Bearer ${token}`;
       }
     }
     
@@ -150,7 +150,7 @@ export const api = {
   },
 
   // Send survey invitation (user endpoint)
-  sendSurveyInvitation: async (phone: string, batchLabel?: string) => {
+  sendSurveyInvitation: async (phone: string) => {
     const normalizedPhone = normalizePhoneNumber(phone);
     return api.post('/api/participants/resend-survey-link', { 
       phone: normalizedPhone, 

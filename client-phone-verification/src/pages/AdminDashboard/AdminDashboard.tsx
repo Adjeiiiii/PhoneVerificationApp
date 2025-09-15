@@ -1,12 +1,13 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
 import Footer from '../Footer/Footer';
 import Navbar from '../NavBar/Navbar';
 import { api } from '../../utils/api';
 
 interface Stats {
   totalVerifications: number;
+  usedLinks: number;
+  availableLinks: number;
   // acceptedVerifications: number; // Remove accepted
   // failedVerifications: number; // Remove failed
 }
@@ -35,6 +36,8 @@ const AdminDashboard: React.FC = () => {
   // Stats
   const [stats, setStats] = useState<Stats>({
     totalVerifications: 0,
+    usedLinks: 0,
+    availableLinks: 0,
     // acceptedVerifications: 0, // Remove accepted
     // failedVerifications: 0, // Remove failed
   });
@@ -97,11 +100,11 @@ const AdminDashboard: React.FC = () => {
       navigate('/admin-login');
       return;
     }
-    fetchStatsAndRecords(token);
+    fetchStatsAndRecords();
   }, [navigate]);
 
 
-  const fetchStatsAndRecords = (token: string) => {
+  const fetchStatsAndRecords = () => {
     console.log('Fetching stats and records...');
     // 1) stats
     api.get('/api/admin/stats')
@@ -111,7 +114,7 @@ const AdminDashboard: React.FC = () => {
       })
       .catch((err) => {
         console.error('Stats error:', err);
-        setStats({ totalVerifications: 0, totalLinks: 0, usedLinks: 0, availableLinks: 0 });
+        setStats({ totalVerifications: 0, usedLinks: 0, availableLinks: 0 });
       });
 
     // 2) invitations (instead of verifications)
@@ -273,7 +276,7 @@ const AdminDashboard: React.FC = () => {
     api.put(`/api/admin/update-user/${editRecord.id}`, data, { headers: { Authorization: `Bearer ${token}` } })
       .then(() => {
         // Refresh data immediately
-        fetchStatsAndRecords(token);
+        fetchStatsAndRecords();
         // Close modal and clear edit record
         setShowEditModal(false);
         setEditRecord(null);
@@ -294,7 +297,7 @@ const AdminDashboard: React.FC = () => {
       .then((data) => {
         if (data.ok) {
           // Refresh data immediately
-          fetchStatsAndRecords(token);
+          fetchStatsAndRecords();
           // Close modal and clear edit record
           setShowEditModal(false);
           setEditRecord(null);
@@ -333,7 +336,7 @@ const AdminDashboard: React.FC = () => {
             selectedRecordIds.length > 1 ? 's' : ''
           }.`
         );
-        fetchStatsAndRecords(token);
+        fetchStatsAndRecords();
       })
       .catch((err) => console.error('Bulk resend error:', err));
   };
@@ -363,7 +366,7 @@ const AdminDashboard: React.FC = () => {
     api.delete(`/api/admin/delete-user/${deleteRecord.id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(() => {
         // Refresh data immediately
-        fetchStatsAndRecords(token);
+        fetchStatsAndRecords();
         // Close both modals and clear records
         setShowDeleteModal(false);
         setShowEditModal(false);
@@ -391,7 +394,7 @@ const AdminDashboard: React.FC = () => {
     )
       .then(() => {
         // Refresh data immediately
-        fetchStatsAndRecords(token);
+        fetchStatsAndRecords();
         // Clear selection and close modal
         setSelectedRecordIds([]);
         setShowBulkDeleteModal(false);
@@ -548,8 +551,7 @@ const AdminDashboard: React.FC = () => {
                     </tr>
                   ) : (
                     currentRecords.map((r) => {
-                      let link = r.assigned_link || 'None Assigned';
-                      if (r.status === 'failed') link = 'None Assigned';
+                      // const _link = r.assigned_link || 'None Assigned';
                       return (
                         <tr key={r.id} className="border-b hover:bg-gray-50 transition">
                           <td className="p-2">
