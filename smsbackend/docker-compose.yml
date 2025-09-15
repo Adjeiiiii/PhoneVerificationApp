@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: research-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"        # change to "5433:5432" if 5432 is busy on your host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: sms-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # ---- App / Server ----
+      SERVER_PORT: ${SERVER_PORT}
+
+      # ---- Database (matches application.yml placeholders) ----
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL_MODE: ${DB_SSL_MODE}
+      DB_POOL_MAX: ${DB_POOL_MAX}
+
+      # ---- Flyway ----
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED}
+
+      # ---- Twilio Configuration ----
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      VERIFY_SERVICE_SID: ${VERIFY_SERVICE_SID}
+      MESSAGING_SERVICE_SID: ${MESSAGING_SERVICE_SID}
+
+      # ---- SendGrid Configuration ----
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

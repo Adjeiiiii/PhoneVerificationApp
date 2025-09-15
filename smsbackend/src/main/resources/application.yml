@@ -1,0 +1,61 @@
+server:
+  port: ${SERVER_PORT:8080}        # Default 8080, override with SERVER_PORT
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hu_research}?sslmode=${DB_SSL_MODE:disable}
+    username: ${DB_USER:hu_app}
+    password: ${DB_PASSWORD:supersecret}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate           # validate schema against entities
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+    open-in-view: false            # prevents lazy-loading leaks
+
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: DEBUG       # shows SQL during dev (quiet in prod)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,mappings       # expose /actuator/health + /actuator/info + /actuator/mappings
+  endpoint:
+    health:
+      probes:
+        enabled: true
+app:
+  phone:
+    defaultRegion: US
+
+twilio:
+  accountSid: ${TWILIO_ACCOUNT_SID:}
+  authToken: ${TWILIO_AUTH_TOKEN:}
+  verifyServiceSid: ${VERIFY_SERVICE_SID:}
+  messagingServiceSid: ${MESSAGING_SERVICE_SID:}
+
+sendgrid:
+  apiKey: ${SENDGRID_API_KEY:}
+  fromEmail: ${SENDGRID_FROM_EMAIL:howardresearch@example.com}
+  fromName: ${SENDGRID_FROM_NAME:Howard Research Team}
+
+admin:
+  username: ${ADMIN_USERNAME:howardresearchadmin}
+  password: ${ADMIN_PASSWORD:HowardResearch2025}
+  jwt:
+    secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890}
+    expiration: ${JWT_EXPIRATION:3600000}  # 1 hour in milliseconds
