@@ -594,17 +594,14 @@ const PhoneVerification: React.FC = () => {
                       </div>
                       <div className="ml-3">
                         <p className="text-sm text-green-700">
-                          {email ? 
-                            `We've sent your unique survey link to ${email}` :
-                            "Here's your unique survey link:"
-                          }
+                          Here's the Howard University AI for Health survey link. You'll also receive this link via text and email:
                         </p>
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-gray-600 mb-2 text-sm font-medium">Your survey link:</p>
+                    <p className="text-gray-600 mb-2 text-sm font-medium">Survey Link:</p>
                     <a
                       href={assignedLink}
                       target="_blank"
@@ -624,7 +621,7 @@ const PhoneVerification: React.FC = () => {
                       </div>
                       <div className="ml-3">
                         <p className="text-sm text-blue-700">
-                          Please note that your survey link is uniquely assigned to you. This personalized link allows you to pause and resume the survey at your convenience, ensuring that your responses are saved and you can continue from where you left off.
+                          You can do the survey on your phone or in a web browser. You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442
                         </p>
                       </div>
                     </div>

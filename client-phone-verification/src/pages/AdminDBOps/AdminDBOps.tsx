@@ -182,6 +182,9 @@ const AdminDBOps: React.FC = () => {
     const token = localStorage.getItem('adminToken');
     if (!token) return;
 
+    // Show loading state
+    setActionMessage('Updating link...');
+
     fetch(`/api/admin/update-link/${editLink.id}`, {
       method: 'PUT',
       headers: {
@@ -197,11 +200,15 @@ const AdminDBOps: React.FC = () => {
             prev.map((ln) => (ln.id === editLink.id ? { ...ln, link: editLink.link } : ln))
           );
           closeEditModal();
+          setActionMessage('Link updated successfully');
         } else {
-          alert(data.error || 'Could not update link');
+          setActionMessage(data.error || 'Could not update link');
         }
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        console.error('Update link error:', err);
+        setActionMessage('Failed to update link: ' + err.message);
+      });
   };
 
   const handleDeleteClick = (ln: LinkRecord) => {

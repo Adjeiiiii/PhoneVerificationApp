@@ -221,6 +221,60 @@ public class AdminSurveyController {
         return Map.of("ok", n > 0);
     }
 
+    // ---------- Update link ----------
+    @PutMapping("/update-link/{id}")
+    public ResponseEntity<?> updateLink(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> updates,
+            HttpServletRequest request
+    ) {
+        // Check authentication
+        if (!isValidAdminToken(request)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized access"));
+        }
+
+        try {
+            // Find the link by ID
+            Optional<SurveyLinkPool> linkOpt = linkRepo.findById(id);
+            if (linkOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            SurveyLinkPool link = linkOpt.get();
+            boolean updated = false;
+
+            // Update link URL if provided
+            if (updates.containsKey("link")) {
+                String newLink = (String) updates.get("link");
+                if (newLink != null && !newLink.trim().isEmpty()) {
+                    link.setLinkUrl(newLink.trim());
+                    updated = true;
+                }
+            }
+
+            if (updated) {
+                linkRepo.save(link);
+                return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Link updated successfully",
+                    "id", link.getId(),
+                    "link", link.getLinkUrl()
+                ));
+            } else {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "No valid fields to update"));
+            }
+
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Link URL already exists"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Failed to update link: " + e.getMessage()));
+        }
+    }
+
     // ---------- List invitations ----------
     @GetMapping("/invitations")
     public ResponseEntity<?> listInvites(
@@ -412,6 +466,15 @@ public class AdminSurveyController {
                 }
             }
 
+            // Update email if provided
+            if (updates.containsKey("email")) {
+                String newEmail = (String) updates.get("email");
+                if (newEmail != null && !newEmail.trim().isEmpty()) {
+                    participant.setEmail(newEmail.trim());
+                    updated = true;
+                }
+            }
+
             // Update participant status if provided
             if (updates.containsKey("status")) {
                 String newStatus = (String) updates.get("status");
@@ -450,6 +513,7 @@ public class AdminSurveyController {
                     "message", "User updated successfully",
                     "id", invitation.getId(),
                     "phone", participant.getPhone(),
+                    "email", participant.getEmail() != null ? participant.getEmail() : "",
                     "status", participant.getStatus().toString(),
                     "messageStatus", invitation.getMessageStatus()
                 ));

@@ -23,12 +23,7 @@ interface VerificationRecord {
   email_sent_at: string | null; // Email timestamp (placeholder for future)
 }
 
-interface LinkRecord {
-  id: string; // Changed from number to string to handle UUIDs
-  link: string;
-  used: boolean;
-  assigned_to: string | null;
-}
+// LinkRecord interface removed - no longer used
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -53,9 +48,7 @@ const AdminDashboard: React.FC = () => {
   const [editRecord, setEditRecord] = useState<VerificationRecord | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Link override
-  const [unusedLinks, setUnusedLinks] = useState<LinkRecord[]>([]);
-  const [overrideLink, setOverrideLink] = useState(false);
+  // Link override (removed - no longer used)
 
   // Navbar dropdown
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -146,23 +139,7 @@ const AdminDashboard: React.FC = () => {
         setRecords([]);
       });
 
-    // 3) links => unused
-    api.get('/api/admin/links')
-      .then((data: any) => {
-        if (data && data.content) {
-          const freeLinks = data.content
-            .filter((ln: any) => ln.status === 'AVAILABLE')
-            .slice(0, 5)
-            .map((link: any) => ({
-              id: link.id,
-              link: link.linkUrl, // Map linkUrl to link
-              used: link.status !== 'AVAILABLE', // Map status to used boolean
-              assigned_to: null // Backend doesn't provide assigned_to yet
-            }));
-          setUnusedLinks(freeLinks);
-        }
-      })
-      .catch((err) => console.error('Links error:', err));
+    // Links fetching removed - no longer used
   };
 
   // For searching phone_number, email, link, or status
@@ -242,11 +219,6 @@ const AdminDashboard: React.FC = () => {
   // Open edit modal
   const handleEdit = (rec: VerificationRecord) => {
     setEditRecord({ ...rec });
-    if (rec.status === 'passed' && rec.assigned_link) {
-      setOverrideLink(false);
-    } else {
-      setOverrideLink(true);
-    }
     setShowEditModal(true);
   };
 
@@ -257,9 +229,7 @@ const AdminDashboard: React.FC = () => {
 
   // Status editing removed - admins can no longer edit status
 
-  const handleOverrideChange = (checked: boolean) => {
-    setOverrideLink(checked);
-  };
+  // handleOverrideChange removed - no longer used
 
   const handleSaveChanges = () => {
     if (!editRecord) return;
@@ -267,9 +237,9 @@ const AdminDashboard: React.FC = () => {
     if (!token) return;
 
     const data = {
-      phone_number: editRecord.phone_number,
+      // phone_number removed - no longer editable
       email: editRecord.email_status, // Use email_status for actual email
-      assigned_link: editRecord.assigned_link,
+      // assigned_link removed - not supported by backend
       // Status editing removed - admins can no longer edit status
     };
 
@@ -281,7 +251,7 @@ const AdminDashboard: React.FC = () => {
         setShowEditModal(false);
         setEditRecord(null);
         // Show success message
-        setBulkActionMessage('Changes saved successfully');
+        setBulkActionMessage('Email updated successfully');
       })
       .catch((err) => {
         console.error('Update error:', err);
@@ -302,14 +272,14 @@ const AdminDashboard: React.FC = () => {
           setShowEditModal(false);
           setEditRecord(null);
           // Show success message
-          setBulkActionMessage('Email resent successfully');
+          setBulkActionMessage('Resent successfully');
         } else {
-          setBulkActionMessage(data.error || 'Failed to resend email');
+          setBulkActionMessage(data.error || 'Failed to resend');
         }
       })
       .catch((err) => {
         console.error('Resend error:', err);
-        setBulkActionMessage('Failed to resend email');
+        setBulkActionMessage('Failed to resend');
       });
   };
 
@@ -332,7 +302,7 @@ const AdminDashboard: React.FC = () => {
       .then(() => {
         // Instead of alert, we show a small success message
         setBulkActionMessage(
-          `Resend email requests sent for ${selectedRecordIds.length} selected record${
+          `Resend requests sent for ${selectedRecordIds.length} selected record${
             selectedRecordIds.length > 1 ? 's' : ''
           }.`
         );
@@ -447,7 +417,17 @@ const AdminDashboard: React.FC = () => {
         setShowDropdown={setShowUserDropdown}
         newUsersCount={0}
         markNotificationsAsSeen={() => {}}
-        leftContent={null}
+        leftContent={
+          <div className="flex items-center gap-3 md:gap-6">
+            <span className="text-sm md:text-base font-semibold text-white">Dashboard</span>
+            <button
+              onClick={() => navigate('/admin-ops')}
+              className="bg-gray-100 text-gray-800 border border-gray-300 px-3 py-1 rounded-md text-xs md:text-sm hover:bg-gray-200 transition"
+            >
+              Database Operations
+            </button>
+          </div>
+        }
         passedUsersCount={0}
         failedUsersCount={0}
       />
@@ -499,7 +479,7 @@ const AdminDashboard: React.FC = () => {
                   onClick={() => setShowBulkResendModal(true)}
                 >
                   <i className="fas fa-envelope mr-2"></i>
-                  Resend Email ({selectedRecordIds.length})
+                  Resend ({selectedRecordIds.length})
                 </button>
               </div>
               <div className="flex items-center gap-2">
@@ -650,7 +630,7 @@ const AdminDashboard: React.FC = () => {
                                       <svg className="mr-3 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                       </svg>
-                                      Resend Email
+                                      Resend
                                     </button>
                                     <button
                                       onClick={() => {
@@ -745,9 +725,10 @@ const AdminDashboard: React.FC = () => {
                   <input
                     type="text"
                     value={editRecord.phone_number}
-                    onChange={(e) => setEditRecord({ ...editRecord, phone_number: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    disabled
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100 text-gray-600"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Phone number cannot be changed</p>
                 </div>
 
                 <div>
@@ -775,47 +756,16 @@ const AdminDashboard: React.FC = () => {
 
                 {/* Status editing removed - admins can no longer edit status */}
 
-                {editRecord.status === 'passed' && (
-                  <div className="space-y-3">
-                    {editRecord.assigned_link ? (
-                      <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-md">
-                        <p className="text-sm text-blue-700">
-                          <span className="font-medium">Current Link:</span><br />
-                          {editRecord.assigned_link}
-                        </p>
-                        <label className="mt-2 inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={overrideLink}
-                            onChange={(e) => handleOverrideChange(e.target.checked)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-blue-700">Assign new link?</span>
-                        </label>
-                      </div>
-                    ) : (
-                      <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3 rounded-r-md">
-                        <p className="text-sm text-yellow-700">No link currently assigned</p>
-                      </div>
-                    )}
-
-                    {(!editRecord.assigned_link || overrideLink) && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Select Link</label>
-                        <select
-                          value={editRecord.assigned_link || ''}
-                          onChange={(e) => setEditRecord({ ...editRecord, assigned_link: e.target.value })}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">(none)</option>
-                          {unusedLinks.map((ln) => (
-                            <option key={ln.id} value={ln.link}>{ln.link}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Link</label>
+                  <input
+                    type="text"
+                    value={editRecord.assigned_link || 'None assigned'}
+                    disabled
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100 text-gray-600"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Link assignment is managed automatically</p>
+                </div>
               </div>
 
               {/* Action Buttons */}
@@ -900,7 +850,7 @@ const AdminDashboard: React.FC = () => {
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold mb-2">Confirm Bulk Resend</h3>
             <p className="text-sm text-gray-700 mb-3">
-              Are you sure you want to resend emails to {selectedRecordIds.length}{' '}
+              Are you sure you want to resend to {selectedRecordIds.length}{' '}
               selected record
               {selectedRecordIds.length > 1 ? 's' : ''}?
             </p>
