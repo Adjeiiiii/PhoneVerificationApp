@@ -1,6 +1,5 @@
 package edu.howard.research.smsbackend.models.entities;
 
-import edu.howard.research.smsbackend.models.entities.LinkStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UuidGenerator;

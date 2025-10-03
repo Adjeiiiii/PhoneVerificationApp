@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Footer from '../Footer/Footer';
 import Navbar from '../NavBar/Navbar';
+import AdminNavigation from '../../components/AdminNavigation';
 import { api } from '../../utils/api';
 
 interface Stats {
@@ -21,6 +22,7 @@ interface VerificationRecord {
   sms_sent_at: string | null; // SMS timestamp
   email_status: string; // Email status (placeholder for future)
   email_sent_at: string | null; // Email timestamp (placeholder for future)
+  completed_at: string | null; // Survey completion timestamp
 }
 
 // LinkRecord interface removed - no longer used
@@ -58,9 +60,20 @@ const AdminDashboard: React.FC = () => {
   const [deleteRecord, setDeleteRecord] = useState<VerificationRecord | null>(null);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showBulkResendModal, setShowBulkResendModal] = useState(false);
+  const [showBulkSurveyModal, setShowBulkSurveyModal] = useState(false);
 
   // For success/failure messages
   const [bulkActionMessage, setBulkActionMessage] = useState<string>('');
+
+  // Helper function to determine if a message is a success message
+  const isSuccessMessage = (message: string): boolean => {
+    const lowerMessage = message.toLowerCase();
+    return lowerMessage.includes('successfully') || 
+           lowerMessage.includes('success') ||
+           (lowerMessage.includes('completed') && !lowerMessage.includes('error')) ||
+           (lowerMessage.includes('deleted') && !lowerMessage.includes('error')) ||
+           (lowerMessage.includes('updated') && !lowerMessage.includes('error'));
+  };
 
   // Add pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -125,7 +138,8 @@ const AdminDashboard: React.FC = () => {
             sms_sent_at: invitation.sentAt || invitation.queuedAt || '',
             // Email fields - show actual data
             email_status: invitation.participant?.email || 'N/A', // Show actual email address
-            email_sent_at: invitation.sentAt || invitation.queuedAt || 'N/A'  // Show actual timestamp
+            email_sent_at: invitation.sentAt || invitation.queuedAt || 'N/A',  // Show actual timestamp
+            completed_at: invitation.completedAt || null // Survey completion timestamp
           }));
           console.log('Converted records:', convertedRecords);
           setRecords(convertedRecords);
@@ -227,6 +241,32 @@ const AdminDashboard: React.FC = () => {
     setShowEditModal(false);
   };
 
+  // Mark survey as completed
+  const handleMarkSurveyCompleted = async (invitationId: string) => {
+    try {
+      await api.markSurveyCompleted(invitationId);
+      // Refresh the data to show updated status
+      fetchStatsAndRecords();
+      alert('Survey marked as completed successfully!');
+    } catch (error) {
+      console.error('Error marking survey as completed:', error);
+      alert('Failed to mark survey as completed. Please try again.');
+    }
+  };
+
+  // Mark survey as not completed (undo completion)
+  const handleMarkSurveyUncompleted = async (invitationId: string) => {
+    try {
+      await api.markSurveyUncompleted(invitationId);
+      // Refresh the data to show updated status
+      fetchStatsAndRecords();
+      alert('Survey marked as not completed successfully!');
+    } catch (error) {
+      console.error('Error marking survey as not completed:', error);
+      alert('Failed to mark survey as not completed. Please try again.');
+    }
+  };
+
   // Status editing removed - admins can no longer edit status
 
   // handleOverrideChange removed - no longer used
@@ -315,6 +355,58 @@ const AdminDashboard: React.FC = () => {
   const proceedBulkResendEmail = () => {
     handleBulkResendEmail();
     setShowBulkResendModal(false);
+  };
+
+  // Bulk mark surveys as completed
+  const handleBulkMarkSurveysCompleted = async () => {
+    try {
+      console.log('Attempting to mark surveys as completed:', selectedRecordIds);
+      
+      if (selectedRecordIds.length === 0) {
+        setBulkActionMessage('No surveys selected');
+        return;
+      }
+      
+      const response = await api.bulkMarkSurveysCompleted(selectedRecordIds);
+      console.log('Bulk complete response:', response);
+      
+      if (response && response.success) {
+        setBulkActionMessage(`Successfully marked ${response.completedCount} surveys as completed`);
+        setSelectedRecordIds([]);
+        fetchStatsAndRecords(); // Refresh the data
+      } else {
+        setBulkActionMessage(`Error: ${response?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Bulk mark completed error:', error);
+      setBulkActionMessage(`Error marking surveys as completed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Bulk mark surveys as not completed
+  const handleBulkMarkSurveysUncompleted = async () => {
+    try {
+      console.log('Attempting to mark surveys as not completed:', selectedRecordIds);
+      
+      if (selectedRecordIds.length === 0) {
+        setBulkActionMessage('No surveys selected');
+        return;
+      }
+      
+      const response = await api.bulkMarkSurveysUncompleted(selectedRecordIds);
+      console.log('Bulk uncomplete response:', response);
+      
+      if (response && response.success) {
+        setBulkActionMessage(`Successfully marked ${response.uncompletedCount} surveys as not completed`);
+        setSelectedRecordIds([]);
+        fetchStatsAndRecords(); // Refresh the data
+      } else {
+        setBulkActionMessage(`Error: ${response?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Bulk mark uncompleted error:', error);
+      setBulkActionMessage(`Error marking surveys as not completed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   // Single delete user
@@ -417,17 +509,7 @@ const AdminDashboard: React.FC = () => {
         setShowDropdown={setShowUserDropdown}
         newUsersCount={0}
         markNotificationsAsSeen={() => {}}
-        leftContent={
-          <div className="flex items-center gap-3 md:gap-6">
-            <span className="text-sm md:text-base font-semibold text-white">Dashboard</span>
-            <button
-              onClick={() => navigate('/admin-ops')}
-              className="bg-gray-100 text-gray-800 border border-gray-300 px-3 py-1 rounded-md text-xs md:text-sm hover:bg-gray-200 transition"
-            >
-              Database Operations
-            </button>
-          </div>
-        }
+        leftContent={<AdminNavigation currentPage="dashboard" />}
         passedUsersCount={0}
         failedUsersCount={0}
       />
@@ -436,9 +518,22 @@ const AdminDashboard: React.FC = () => {
           {/* Notification Banner */}
           {bulkActionMessage && (
             <div className={`mb-4 p-4 rounded-md ${
-              bulkActionMessage.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              isSuccessMessage(bulkActionMessage)
+                ? 'bg-green-100 text-green-800 border border-green-200' 
+                : 'bg-red-100 text-red-800 border border-red-200'
             }`}>
-              {bulkActionMessage}
+              <div className="flex items-center">
+                {isSuccessMessage(bulkActionMessage) ? (
+                  <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+                <span className="font-medium">{bulkActionMessage}</span>
+              </div>
             </div>
           )}
 
@@ -481,6 +576,17 @@ const AdminDashboard: React.FC = () => {
                   <i className="fas fa-envelope mr-2"></i>
                   Resend ({selectedRecordIds.length})
                 </button>
+                <button
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors
+                    ${selectedRecordIds.length === 0 
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                  disabled={selectedRecordIds.length === 0}
+                  onClick={() => setShowBulkSurveyModal(true)}
+                >
+                  <i className="fas fa-check-circle mr-2"></i>
+                  Survey Actions ({selectedRecordIds.length})
+                </button>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600">Show:</span>
@@ -513,10 +619,11 @@ const AdminDashboard: React.FC = () => {
                         onChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="p-2 w-28">Phone #</th>
+                    <th className="p-2 w-32">Phone #</th>
                     <th className="p-2 w-32">SMS Status</th>
-                    <th className="p-2 w-32">Email Address</th>
-                    <th className="p-2 w-44">Assigned Link</th>
+                    <th className="p-2 w-32">Survey Status</th>
+                    <th className="p-2 w-36">Email Address</th>
+                    <th className="p-2 w-48">Assigned Link</th>
                     <th className="p-2 w-36">SMS Sent At</th>
                     <th className="p-2 w-36">Email Sent At</th>
                     <th className="p-2 w-20"></th>
@@ -525,7 +632,7 @@ const AdminDashboard: React.FC = () => {
                 <tbody>
                   {currentRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-4 text-center text-gray-500">
+                      <td colSpan={8} className="p-4 text-center text-gray-500">
                         No records found.
                       </td>
                     </tr>
@@ -553,6 +660,17 @@ const AdminDashboard: React.FC = () => {
                             }`}>
                               {r.status || 'pending'}
                             </span>
+                          </td>
+                          <td className="p-2 break-words">
+                            {r.completed_at ? (
+                              <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+                                Completed
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                Pending
+                              </span>
+                            )}
                           </td>
                           <td className="p-2 break-words">
                             {r.email_status && r.email_status !== 'N/A' ? (
@@ -631,6 +749,27 @@ const AdminDashboard: React.FC = () => {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                       </svg>
                                       Resend
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (r.completed_at) {
+                                          handleMarkSurveyUncompleted(r.id);
+                                        } else {
+                                          handleMarkSurveyCompleted(r.id);
+                                        }
+                                        setActiveActionMenu(null);
+                                      }}
+                                      className="flex items-center w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100"
+                                      role="menuitem"
+                                    >
+                                      <svg className={`mr-3 h-4 w-4 flex-shrink-0 text-gray-500`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        {r.completed_at ? (
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                        ) : (
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        )}
+                                      </svg>
+                                      <span className="text-left">{r.completed_at ? 'Mark as Not Completed' : 'Mark Survey Completed'}</span>
                                     </button>
                                     <button
                                       onClick={() => {
@@ -866,6 +1005,48 @@ const AdminDashboard: React.FC = () => {
                 onClick={proceedBulkResendEmail}
               >
                 Resend
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkSurveyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-2">Bulk Survey Actions</h3>
+            <p className="text-sm text-gray-700 mb-4">
+              Choose an action for {selectedRecordIds.length} selected record
+              {selectedRecordIds.length > 1 ? 's' : ''}:
+            </p>
+            <div className="space-y-3 mb-4">
+              <button
+                className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center"
+                onClick={async () => {
+                  await handleBulkMarkSurveysCompleted();
+                  setShowBulkSurveyModal(false);
+                }}
+              >
+                <i className="fas fa-check mr-2"></i>
+                Mark as Completed
+              </button>
+              <button
+                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center"
+                onClick={async () => {
+                  await handleBulkMarkSurveysUncompleted();
+                  setShowBulkSurveyModal(false);
+                }}
+              >
+                <i className="fas fa-undo mr-2"></i>
+                Mark as Not Completed
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
+                onClick={() => setShowBulkSurveyModal(false)}
+              >
+                Cancel
               </button>
             </div>
           </div>

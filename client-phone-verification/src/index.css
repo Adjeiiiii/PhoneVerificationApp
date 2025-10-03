@@ -2,3 +2,47 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Fix datetime-local input styling */
+input[type="datetime-local"] {
+  color: #111827 !important;
+  font-weight: normal !important;
+}
+
+input[type="datetime-local"]::-webkit-datetime-edit-text {
+  color: #111827 !important;
+  font-weight: normal !important;
+}
+
+input[type="datetime-local"]::-webkit-datetime-edit-month-field,
+input[type="datetime-local"]::-webkit-datetime-edit-day-field,
+input[type="datetime-local"]::-webkit-datetime-edit-year-field {
+  color: #111827 !important;
+  font-weight: normal !important;
+}
+
+input[type="datetime-local"]::-webkit-datetime-edit-hour-field,
+input[type="datetime-local"]::-webkit-datetime-edit-minute-field,
+input[type="datetime-local"]::-webkit-datetime-edit-second-field {
+  color: #111827 !important;
+  font-weight: normal !important;
+}
+
+/* Modern select dropdown styling */
+select {
+  background-color: white !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 0.5rem !important;
+}
+
+select:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+select option {
+  background-color: white !important;
+  color: #111827 !important;
+  padding: 0.5rem !important;
+}

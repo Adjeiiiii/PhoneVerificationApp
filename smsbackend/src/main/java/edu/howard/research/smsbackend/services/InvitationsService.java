@@ -96,6 +96,68 @@ public class InvitationsService {
         return inviteRepo.save(inv);
     }
 
+    /**
+     * Mark an invitation as not completed (undo completion)
+     */
+    @Transactional
+    public SurveyInvitation uncomplete(UUID invitationId) {
+        SurveyInvitation inv = inviteRepo.findById(invitationId).orElseThrow();
+        inv.setCompletedAt(null);
+        inv.setMessageStatus("delivered"); // Reset to previous status
+        return inviteRepo.save(inv);
+    }
+
+    /**
+     * Bulk mark invitations as completed
+     */
+    @Transactional
+    public int bulkComplete(java.util.List<UUID> invitationIds) {
+        int completedCount = 0;
+        OffsetDateTime now = OffsetDateTime.now();
+        
+        for (UUID invitationId : invitationIds) {
+            try {
+                SurveyInvitation inv = inviteRepo.findById(invitationId).orElse(null);
+                if (inv != null && inv.getCompletedAt() == null) {
+                    inv.setCompletedAt(now);
+                    inv.setMessageStatus("completed");
+                    inviteRepo.save(inv);
+                    completedCount++;
+                }
+            } catch (Exception e) {
+                // Log error but continue with other invitations
+                System.err.println("Failed to complete invitation " + invitationId + ": " + e.getMessage());
+            }
+        }
+        
+        return completedCount;
+    }
+
+    /**
+     * Bulk mark invitations as not completed
+     */
+    @Transactional
+    public int bulkUncomplete(java.util.List<UUID> invitationIds) {
+        int uncompletedCount = 0;
+        
+        for (UUID invitationId : invitationIds) {
+            try {
+                SurveyInvitation inv = inviteRepo.findById(invitationId).orElse(null);
+                if (inv != null && inv.getCompletedAt() != null) {
+                    inv.setCompletedAt(null);
+                    inv.setMessageStatus("delivered"); // Reset to previous status
+                    inviteRepo.save(inv);
+                    uncompletedCount++;
+                }
+            } catch (Exception e) {
+                // Log error but continue with other invitations
+                System.err.println("Failed to uncomplete invitation " + invitationId + ": " + e.getMessage());
+            }
+        }
+        
+        return uncompletedCount;
+    }
+
     @Transactional
     public void markQueued(java.util.UUID invitationId, String sid) {
         inviteRepo.setQueued(invitationId, sid, "queued", java.time.OffsetDateTime.now());

@@ -86,6 +86,33 @@ public class EmailService {
         }
     }
 
+    public boolean sendGiftCard(String toEmail, String participantName, String subject, String htmlContent) {
+        try {
+            Email from = new Email(fromEmail, fromName);
+            Content content = new Content("text/html", htmlContent);
+            
+            Mail mail = new Mail(from, subject, new Email(toEmail), content);
+            
+            SendGrid sg = new SendGrid(apiKey);
+            Request request = new Request();
+            
+            request.setMethod(Method.POST);
+            request.setEndpoint("mail/send");
+            request.setBody(mail.build());
+            
+            Response response = sg.api(request);
+            
+            log.info("Gift card email sent to {}: Status={}, ResponseCode={}", 
+                    toEmail, response.getStatusCode(), response.getBody());
+            
+            return response.getStatusCode() >= 200 && response.getStatusCode() < 300;
+            
+        } catch (Exception e) {
+            log.error("Failed to send gift card email to {}: {}", toEmail, e.getMessage());
+            return false;
+        }
+    }
+
     private String buildSurveyLinkEmail(String participantName, String surveyLink) {
         return String.format("""
             <!DOCTYPE html>

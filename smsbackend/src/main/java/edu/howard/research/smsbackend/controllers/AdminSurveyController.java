@@ -392,6 +392,55 @@ public class AdminSurveyController {
         );
     }
 
+    // ---------- Mark invitation as not completed (undo completion) ----------
+    @PostMapping("/invitations/{id}/uncomplete")
+    public Map<String, Object> uncomplete(@PathVariable UUID id) {
+        SurveyInvitation inv = invitationsService.uncomplete(id);
+        return Map.of(
+                "ok", true,
+                "invitationId", inv.getId(),
+                "status", inv.getMessageStatus()
+        );
+    }
+
+    // ---------- Bulk mark invitations as completed ----------
+    @PostMapping("/invitations/bulk-complete")
+    public ResponseEntity<Map<String, Object>> bulkComplete(@RequestBody List<UUID> invitationIds) {
+        try {
+            int completedCount = invitationsService.bulkComplete(invitationIds);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Successfully marked " + completedCount + " surveys as completed",
+                    "completedCount", completedCount,
+                    "totalRequested", invitationIds.size()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", "Failed to mark surveys as completed: " + e.getMessage()
+            ));
+        }
+    }
+
+    // ---------- Bulk mark invitations as not completed ----------
+    @PostMapping("/invitations/bulk-uncomplete")
+    public ResponseEntity<Map<String, Object>> bulkUncomplete(@RequestBody List<UUID> invitationIds) {
+        try {
+            int uncompletedCount = invitationsService.bulkUncomplete(invitationIds);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Successfully marked " + uncompletedCount + " surveys as not completed",
+                    "uncompletedCount", uncompletedCount,
+                    "totalRequested", invitationIds.size()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", "Failed to mark surveys as not completed: " + e.getMessage()
+            ));
+        }
+    }
+
     // ---------- Clean up orphaned links ----------
     @PostMapping("/links/cleanup-orphaned")
     public ResponseEntity<?> cleanupOrphanedLinks() {

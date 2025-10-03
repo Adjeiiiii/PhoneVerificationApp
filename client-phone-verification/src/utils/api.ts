@@ -178,4 +178,91 @@ export const api = {
     const normalizedPhone = normalizePhoneNumber(phone);
     return api.get(`/api/participants/check-verification/${encodeURIComponent(normalizedPhone)}`);
   },
+
+  // Gift Card API calls
+  getGiftCardPoolStatus: async () => {
+    return api.get('/api/admin/gift-cards/pool/status');
+  },
+
+  getAvailableGiftCards: async (page = 0, size = 20) => {
+    return api.get(`/api/admin/gift-cards/pool/available?page=${page}&size=${size}`);
+  },
+
+  getEligibleParticipants: async () => {
+    return api.get('/api/admin/gift-cards/eligible');
+  },
+
+  getGiftCards: async (filters: any = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        params.append(key, String(value));
+      }
+    });
+    return api.get(`/api/admin/gift-cards?${params.toString()}`);
+  },
+
+  addGiftCardToPool: async (giftCard: any) => {
+    return api.post('/api/admin/gift-cards/pool/add', giftCard);
+  },
+
+  uploadGiftCards: async (file: File, batchLabel: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('batchLabel', batchLabel);
+    
+    const token = localStorage.getItem('adminToken');
+    const headers: any = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(getApiUrl('/api/admin/gift-cards/pool/upload'), {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  sendGiftCard: async (participantId: string, giftCardData: any) => {
+    return api.post(`/api/admin/gift-cards/send/${participantId}`, giftCardData);
+  },
+
+  resendGiftCard: async (giftCardId: string) => {
+    return api.post(`/api/admin/gift-cards/${giftCardId}/resend`);
+  },
+
+  addGiftCardNotes: async (giftCardId: string, notes: string) => {
+    return api.post(`/api/admin/gift-cards/${giftCardId}/notes`, { notes });
+  },
+
+  deleteGiftCardFromPool: async (poolId: string) => {
+    return api.delete(`/api/admin/gift-cards/pool/${poolId}`);
+  },
+
+  deleteGiftCard: async (giftCardId: string) => {
+    return api.delete(`/api/admin/gift-cards/${giftCardId}`);
+  },
+
+  getGiftCardDistributionLogs: async (giftCardId: string) => {
+    return api.get(`/api/admin/gift-cards/${giftCardId}/logs`);
+  },
+
+  // Survey management API calls
+  markSurveyCompleted: async (invitationId: string) => {
+    return api.post(`/api/admin/invitations/${invitationId}/complete`);
+  },
+
+  markSurveyUncompleted: async (invitationId: string) => {
+    return api.post(`/api/admin/invitations/${invitationId}/uncomplete`);
+  },
+
+  bulkMarkSurveysCompleted: async (invitationIds: string[]) => {
+    return api.post('/api/admin/invitations/bulk-complete', invitationIds);
+  },
+
+  bulkMarkSurveysUncompleted: async (invitationIds: string[]) => {
+    return api.post('/api/admin/invitations/bulk-uncomplete', invitationIds);
+  },
 };

@@ -34,6 +34,7 @@ public class SurveyServiceImpl implements SurveyService {
     private final SmsService smsService;
     private final EmailService emailService;
     private final PhoneNumberService phoneNumberService;
+    private final GiftCardService giftCardService;
 
     @Override
     @Transactional
@@ -177,6 +178,16 @@ public class SurveyServiceImpl implements SurveyService {
         if (inv.getLink() != null && inv.getLink().getId() != null) {
             try { linkPoolRepository.markExhausted(inv.getLink().getId()); }
             catch (Exception ex) { log.warn("Failed to mark link exhausted for invitation {}: {}", inv.getId(), ex.getMessage()); }
+        }
+
+        // Create pending gift card for the participant
+        try {
+            giftCardService.createPendingGiftCard(inv.getParticipant().getId(), inv.getId());
+            log.info("Created pending gift card for participant {} and invitation {}", 
+                    inv.getParticipant().getId(), inv.getId());
+        } catch (Exception ex) {
+            log.warn("Failed to create pending gift card for participant {} and invitation {}: {}", 
+                    inv.getParticipant().getId(), inv.getId(), ex.getMessage());
         }
 
         SmsEventLog logRow = new SmsEventLog();

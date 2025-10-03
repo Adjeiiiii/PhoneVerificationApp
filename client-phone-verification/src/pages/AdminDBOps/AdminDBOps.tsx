@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../NavBar/Navbar';
+import AdminNavigation from '../../components/AdminNavigation';
 import Footer from '../Footer/Footer';
 import { api } from '../../utils/api';
 
@@ -437,17 +438,7 @@ const AdminDBOps: React.FC = () => {
   }
 
   // Custom left content for the Navbar on this page
-  const leftContent = (
-    <div className="flex items-center gap-3 md:gap-6">
-      <button
-        onClick={() => navigate('/admin-dashboard')}
-        className="bg-gray-100 text-gray-800 border border-gray-300 px-3 py-1 rounded-md text-xs md:text-sm hover:bg-gray-200 transition"
-      >
-        Dashboard
-      </button>
-      <span className="text-sm md:text-base font-semibold">Database Operations</span>
-    </div>
-  );
+  const leftContent = <AdminNavigation currentPage="database" />;
 
   return (
     <div className="bg-gray-100 min-h-screen flex flex-col pt-16">

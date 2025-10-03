@@ -12,6 +12,7 @@ import Footer from './pages/Footer/Footer';
 import AdminLogin from './pages/AdminLogin/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard/AdminDashboard';
 import AdminDBOps from './pages/AdminDBOps/AdminDBOps';
+import GiftCardManagement from './pages/GiftCardManagement/GiftCardManagement';
 
 // Protected Routes
 import { ProtectedRoute } from './routes/ProtectedRoute';
@@ -43,6 +44,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <AdminDBOps />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin-gift-cards" 
+                element={
+                  <ProtectedRoute>
+                    <GiftCardManagement />
                   </ProtectedRoute>
                 } 
               />
