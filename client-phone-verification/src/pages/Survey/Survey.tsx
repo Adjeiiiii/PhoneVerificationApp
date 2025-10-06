@@ -416,7 +416,7 @@ const Survey: React.FC = () => {
                     </p>
                     <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                       <p className="text-sm text-yellow-800">
-                        <span className="font-medium">📧 Email Notice:</span> If you don't receive the email, please check your spam/junk folder. Our emails may sometimes be filtered there.
+                        <span className="font-medium">📧 Email Notice:</span> If you haven't received our email, kindly check your spam or junk folder.
                       </p>
                     </div>
                   </div>

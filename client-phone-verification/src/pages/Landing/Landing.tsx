@@ -39,14 +39,8 @@ const Landing: React.FC = () => {
               <div className="bg-blue-50 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold text-blue-900 mb-4">Study Leadership</h3>
                 <p className="text-blue-800">
-                  This study is led by researchers at Howard University:
+                  This study is led by researchers at Howard University.
                 </p>
-                <ul className="list-none space-y-2 mt-2">
-                  <li className="text-blue-800">• Jae Eun Chung, PhD</li>
-                  <li className="text-blue-800">• Jiang Li, PhD</li>
-                  <li className="text-blue-800">• Meirong Liu, PhD</li>
-                  <li className="text-blue-800">• Amy Quarkume, PhD</li>
-                </ul>
               </div>
             </div>
           </div>
@@ -65,14 +59,14 @@ const Landing: React.FC = () => {
                 <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-indigo-600 text-xl font-bold">1</span>
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Complete Eligibility Form</h3>
-                <p className="text-gray-600">Short questionnaire to determine if you qualify</p>
+                <h3 className="font-semibold text-gray-900 mb-2">Complete Eligibility Questions</h3>
+                <p className="text-gray-600">Just three short, simple questions to determine if you qualify</p>
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-indigo-600 text-xl font-bold">2</span>
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Verify Your Number</h3>
+                <h3 className="font-semibold text-gray-900 mb-2">Verify Your Phone Number</h3>
                 <p className="text-gray-600">Receive a one-time verification code via SMS</p>
               </div>
               <div className="text-center">
@@ -86,49 +80,57 @@ const Landing: React.FC = () => {
           </div>
         </div>
 
-        {/* Phone Number Usage Section */}
+        {/* Privacy Section */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
           <div className="bg-gradient-to-r from-green-600 to-green-800 px-6 py-6">
             <h2 className="text-2xl font-bold text-white text-center">
-              Why We Need Your Phone Number
+              Your Privacy is Our Priority
             </h2>
           </div>
           <div className="p-6 md:p-8">
             <div className="space-y-4">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <svg className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+              <p className="text-gray-700 font-medium mb-4">
+                Your phone number will only be used to:
+              </p>
+              <div className="space-y-3 ml-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="ml-3 text-gray-700">
+                    Send you a one-time verification code
+                  </p>
                 </div>
-                <p className="ml-3 text-gray-700">
-                  To send you a one-time verification code
-                </p>
-              </div>
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <svg className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="ml-3 text-gray-700">
+                    Send you your personalized survey link
+                  </p>
                 </div>
-                <p className="ml-3 text-gray-700">
-                  To send you your personalized survey link
-                </p>
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="ml-3 text-gray-700">
+                    Send you your gift card reward upon survey completion
+                  </p>
+                </div>
               </div>
-              <div className="bg-green-50 rounded-lg p-4 mt-4">
-                <p className="text-green-800 font-medium">Your privacy is our priority:</p>
-                <ul className="mt-2 space-y-2">
+              <div className="bg-green-50 rounded-lg p-4 mt-6">
+                <ul className="space-y-2">
                   <li className="flex items-start">
                     <svg className="h-5 w-5 text-green-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span className="ml-2 text-green-700">Your number will NOT be used for marketing or spam</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-green-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="ml-2 text-green-700">Your number will not be shared or stored for reuse</span>
+                    <span className="ml-2 text-green-700">Your phone number will NOT be used for marketing or spam</span>
                   </li>
                 </ul>
               </div>
@@ -164,7 +166,7 @@ const Landing: React.FC = () => {
               </ul>
               <div className="bg-purple-50 rounded-lg p-4">
                 <p className="text-purple-800">
-                  <span className="font-medium">📩</span> You may receive up to 2 messages total, unless you explicitly request a resend.
+                  <span className="font-medium">📩</span> You will receive a verification code, survey link, and gift card information.
                 </p>
                 <p className="text-purple-800 mt-2">
                   <span className="font-medium">📴</span> You can opt out at any time by replying STOP to any message.
