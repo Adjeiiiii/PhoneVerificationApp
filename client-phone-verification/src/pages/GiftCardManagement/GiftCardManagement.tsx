@@ -109,6 +109,7 @@ const GiftCardManagement: React.FC = () => {
   
   const [sendData, setSendData] = useState({
     participantId: '',
+    invitationId: '',
     cardType: 'AMAZON',
     cardValue: 25.00,
     cardCode: '',
@@ -126,16 +127,16 @@ const GiftCardManagement: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  // Auto-dismiss success messages after 3 seconds
+  // Auto-dismiss success messages after 5 seconds
   useEffect(() => {
-    if (message && message.type === 'success') {
+    if (message) {
       const timer = setTimeout(() => {
         setMessage(null);
-      }, 3000);
-      
+      }, 5000); // 5 seconds for better UX
       return () => clearTimeout(timer);
     }
   }, [message]);
+
 
   // Reset form to default values
   const resetGiftCardForm = () => {
@@ -309,18 +310,33 @@ const GiftCardManagement: React.FC = () => {
   };
 
   const handleSendGiftCard = async () => {
-    if (!sendData.participantId || !sendData.cardCode || !sendData.redemptionUrl) {
-      setMessage({ type: 'error', text: 'Please fill in all required fields' });
+    console.log('Send gift card data:', sendData);
+    
+    if (!sendData.participantId || !sendData.invitationId) {
+      setMessage({ type: 'error', text: 'No participant selected' });
+      return;
+    }
+    
+    if (!sendData.poolId) {
+      setMessage({ type: 'error', text: 'Please select a gift card from the pool' });
       return;
     }
 
     setLoading(true);
     try {
-      await api.sendGiftCard(sendData.participantId, sendData);
+      console.log('Sending gift card to participant:', sendData.participantId);
+      console.log('Gift card data:', sendData);
+      console.log('Invitation ID being sent:', sendData.invitationId);
+      console.log('Pool ID being sent:', sendData.poolId);
+      
+      const result = await api.sendGiftCard(sendData.participantId, sendData);
+      console.log('API call result:', result);
+      
       setMessage({ type: 'success', text: 'Gift card sent successfully!' });
       setShowSendModal(false);
       setSendData({
         participantId: '',
+        invitationId: '',
         cardType: 'AMAZON',
         cardValue: 25.00,
         cardCode: '',
@@ -332,10 +348,33 @@ const GiftCardManagement: React.FC = () => {
         source: 'MANUAL',
         poolId: ''
       });
+      
+      // Refresh the data
       await fetchEligibleParticipants();
       await fetchSentGiftCards();
+      await fetchPoolData(); // Also refresh pool data since card status will change
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to send gift card' });
+      console.error('Send gift card error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        status: error.status,
+        response: error.response
+      });
+      
+      let errorMessage = 'Failed to send gift card';
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.status === 403) {
+        errorMessage = 'Access denied. Please check your permissions.';
+      } else if (error.status === 400) {
+        errorMessage = 'Invalid request. Please check the gift card details.';
+      } else if (error.status === 404) {
+        errorMessage = 'Participant or gift card not found.';
+      } else if (error.status >= 500) {
+        errorMessage = 'Server error. Please try again later.';
+      }
+      
+      setMessage({ type: 'error', text: errorMessage });
     } finally {
       setLoading(false);
     }
@@ -344,15 +383,32 @@ const GiftCardManagement: React.FC = () => {
   const handleDeletePoolCard = async () => {
     if (!selectedItem) return;
 
+    console.log('Selected item for deletion:', selectedItem);
+    console.log('Selected item ID:', selectedItem.id, 'Type:', typeof selectedItem.id);
+
+    // Validate that the ID is a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(selectedItem.id)) {
+      setMessage({ type: 'error', text: `Invalid gift card ID format: ${selectedItem.id}. Please refresh the page and try again.` });
+      setShowDeleteModal(false);
+      setSelectedItem(null);
+      return;
+    }
+
     setLoading(true);
     try {
+      console.log('Attempting to delete gift card with ID:', selectedItem.id);
       await api.deleteGiftCardFromPool(selectedItem.id);
+      
       setMessage({ type: 'success', text: 'Gift card deleted successfully!' });
       setShowDeleteModal(false);
       setSelectedItem(null);
+      
+      // Refresh the data
       await fetchPoolStatus();
       await fetchPoolData();
     } catch (error: any) {
+      console.error('Delete error details:', error);
       setMessage({ type: 'error', text: error.message || 'Failed to delete gift card' });
     } finally {
       setLoading(false);
@@ -362,14 +418,31 @@ const GiftCardManagement: React.FC = () => {
   const handleDeleteSentCard = async () => {
     if (!selectedItem) return;
 
+    console.log('Selected sent card for deletion:', selectedItem);
+    console.log('Selected sent card ID:', selectedItem.id, 'Type:', typeof selectedItem.id);
+
+    // Validate that the ID is a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(selectedItem.id)) {
+      setMessage({ type: 'error', text: `Invalid gift card ID format: ${selectedItem.id}. Please refresh the page and try again.` });
+      setShowDeleteModal(false);
+      setSelectedItem(null);
+      return;
+    }
+
     setLoading(true);
     try {
+      console.log('Attempting to delete sent gift card with ID:', selectedItem.id);
       await api.deleteGiftCard(selectedItem.id);
+      
       setMessage({ type: 'success', text: 'Gift card deleted successfully!' });
       setShowDeleteModal(false);
       setSelectedItem(null);
+      
+      // Refresh the data
       await fetchSentGiftCards();
     } catch (error: any) {
+      console.error('Delete sent card error details:', error);
       setMessage({ type: 'error', text: error.message || 'Failed to delete gift card' });
     } finally {
       setLoading(false);
@@ -469,34 +542,55 @@ const GiftCardManagement: React.FC = () => {
           </div>
 
           <div className="p-6">
-            {/* Message */}
+            {/* Modern Slide-Down Notification */}
             {message && (
-              <div className={`mb-4 p-4 rounded-md border ${
-                message.type === 'success' 
-                  ? 'bg-green-100 text-green-800 border-green-200' 
-                  : 'bg-red-100 text-red-800 border-red-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    {message.type === 'success' ? (
-                      <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                    <span className="font-medium">{message.text}</span>
+              <div className="fixed top-0 left-0 right-0 z-[70] transform transition-transform duration-300 ease-out">
+                <div className={`mx-4 mt-4 rounded-lg shadow-lg border-l-4 ${
+                  message.type === 'success' 
+                    ? 'bg-green-50 border-l-green-500' 
+                    : 'bg-red-50 border-l-red-500'
+                }`}>
+                  <div className="p-4">
+                    <div className="flex items-center">
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                        message.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        {message.type === 'success' ? (
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <h3 className={`text-sm font-medium ${
+                          message.type === 'success' ? 'text-green-800' : 'text-red-800'
+                        }`}>
+                          {message.type === 'success' ? 'Success!' : 'Error'}
+                        </h3>
+                        <p className={`mt-1 text-sm ${
+                          message.type === 'success' ? 'text-green-700' : 'text-red-700'
+                        }`}>
+                          {message.text}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setMessage(null)}
+                        className={`ml-4 flex-shrink-0 rounded-md p-1.5 ${
+                          message.type === 'success' 
+                            ? 'text-green-500 hover:bg-green-100' 
+                            : 'text-red-500 hover:bg-red-100'
+                        } transition-colors`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setMessage(null)}
-                    className={`ml-4 text-sm hover:underline ${
-                      message.type === 'success' ? 'text-green-600' : 'text-red-600'
-                    }`}
-                  >
-                    Dismiss
-                  </button>
                 </div>
               </div>
             )}
@@ -536,7 +630,13 @@ const GiftCardManagement: React.FC = () => {
                           Value
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Redemption URL
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Batch
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Notes
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
@@ -561,8 +661,32 @@ const GiftCardManagement: React.FC = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {formatCurrency(card.cardValue)}
                           </td>
+                          <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                            <a 
+                              href={card.redemptionUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 hover:underline truncate block"
+                              title={card.redemptionUrl}
+                            >
+                              {card.redemptionUrl.length > 40 
+                                ? `${card.redemptionUrl.substring(0, 40)}...` 
+                                : card.redemptionUrl
+                              }
+                            </a>
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {card.batchLabel}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                            <div 
+                              className="truncate"
+                              title={card.notes || 'No notes'}
+                            >
+                              {card.notes || (
+                                <span className="text-gray-400 italic">No notes</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -640,7 +764,8 @@ const GiftCardManagement: React.FC = () => {
                               onClick={() => {
                                 setSendData({
                                   ...sendData,
-                                  participantId: participant.participantId
+                                  participantId: participant.participantId,
+                                  invitationId: participant.invitationId
                                 });
                                 setShowSendModal(true);
                               }}
@@ -740,7 +865,7 @@ const GiftCardManagement: React.FC = () => {
 
       {/* Add Gift Card Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-auto max-h-[85vh] overflow-y-auto">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200">
@@ -956,7 +1081,7 @@ const GiftCardManagement: React.FC = () => {
 
       {/* Upload CSV Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-auto">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200">
@@ -1119,99 +1244,213 @@ const GiftCardManagement: React.FC = () => {
 
       {/* Send Gift Card Modal */}
       {showSendModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Send Gift Card</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Card Code *</label>
-                  <input
-                    type="text"
-                    value={sendData.cardCode}
-                    onChange={(e) => setSendData({ ...sendData, cardCode: e.target.value })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="AMAZON-ABC123-XYZ789"
-                  />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-auto max-h-[85vh] overflow-y-auto">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Send Gift Card</h3>
+                    <p className="text-sm text-gray-500">Select a gift card from the pool to send to participant</p>
+                  </div>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Card Type</label>
-                  <select
-                    value={sendData.cardType}
-                    onChange={(e) => setSendData({ ...sendData, cardType: e.target.value })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="AMAZON">Amazon</option>
-                    <option value="VISA">Visa</option>
-                    <option value="MASTERCARD">Mastercard</option>
-                    <option value="APPLE">Apple</option>
-                    <option value="GOOGLE_PLAY">Google Play</option>
-                    <option value="STEAM">Steam</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+                <button
+                  onClick={() => setShowSendModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-4">
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Available Gift Cards</h4>
+                <p className="text-xs text-gray-500">Select a gift card from the pool to send to this participant</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Select
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Card Code
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Value
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Batch
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Expires
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {poolCards.filter(card => card.status === 'AVAILABLE').map((card) => (
+                      <tr key={card.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <input
+                            type="radio"
+                            name="selectedCard"
+                            value={card.id}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSendData({
+                                  ...sendData,
+                                  cardCode: card.cardCode,
+                                  cardType: card.cardType,
+                                  cardValue: card.cardValue,
+                                  redemptionUrl: card.redemptionUrl,
+                                  redemptionInstructions: card.redemptionInstructions,
+                                  poolId: card.id,
+                                  source: 'POOL'
+                                });
+                              }
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                          />
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {card.cardCode}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {card.cardType}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {formatCurrency(card.cardValue)}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {card.batchLabel}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {card.expiresAt ? formatDate(card.expiresAt) : 'Never'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {poolCards.filter(card => card.status === 'AVAILABLE').length === 0 && (
+                <div className="text-center py-8">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No available gift cards</h3>
+                  <p className="mt-1 text-sm text-gray-500">Add some gift cards to the pool first.</p>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Card Value</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={sendData.cardValue}
-                    onChange={(e) => setSendData({ ...sendData, cardValue: parseFloat(e.target.value) })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Redemption URL *</label>
-                  <input
-                    type="text"
-                    value={sendData.redemptionUrl}
-                    onChange={(e) => setSendData({ ...sendData, redemptionUrl: e.target.value })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="https://amazon.com/gc/redeem?code=ABC123"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Delivery Method</label>
+              )}
+
+              {/* Delivery Method */}
+              <div className="mt-8">
+                <label className="block text-sm font-semibold text-gray-800 mb-3 flex items-center">
+                  <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Delivery Method
+                </label>
+                <div className="relative">
                   <select
                     value={sendData.deliveryMethod}
                     onChange={(e) => setSendData({ ...sendData, deliveryMethod: e.target.value })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 appearance-none cursor-pointer text-gray-700 font-medium shadow-sm hover:border-gray-300"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: 'right 1rem center',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundSize: '1.25em 1.25em',
+                      paddingRight: '3rem'
+                    }}
                   >
                     <option value="EMAIL">Email Only</option>
                     <option value="SMS">SMS Only</option>
                     <option value="BOTH">Both Email & SMS</option>
                   </select>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Notes</label>
+                <p className="mt-2 text-xs text-gray-500 flex items-center">
+                  <svg className="w-3 h-3 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Choose how the participant will receive their gift card
+                </p>
+              </div>
+
+              {/* Notes */}
+              <div className="mt-6">
+                <label className="block text-sm font-semibold text-gray-800 mb-3 flex items-center">
+                  <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Notes
+                  <span className="ml-2 text-xs font-normal text-gray-500">(Optional)</span>
+                </label>
+                <div className="relative">
                   <textarea
                     value={sendData.notes}
                     onChange={(e) => setSendData({ ...sendData, notes: e.target.value })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 resize-none text-gray-700 placeholder-gray-400 shadow-sm hover:border-gray-300"
                     rows={3}
+                    placeholder="Add any special instructions or notes about this gift card delivery..."
                   />
+                  <div className="absolute bottom-3 right-3 text-xs text-gray-400">
+                    {sendData.notes.length}/500
+                  </div>
                 </div>
+                <p className="mt-2 text-xs text-gray-500 flex items-center">
+                  <svg className="w-3 h-3 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Include any special instructions or context for this delivery
+                </p>
               </div>
-              
-              <div className="flex justify-end space-x-3 mt-6">
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 bg-gray-50 rounded-b-xl">
+              <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setShowSendModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSendGiftCard}
-                  disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  disabled={loading || !sendData.poolId}
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
                 >
-                  {loading ? 'Sending...' : 'Send Gift Card'}
+                  {loading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      <span>Send Gift Card</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1221,7 +1460,7 @@ const GiftCardManagement: React.FC = () => {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-[55]">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Delete</h3>

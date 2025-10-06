@@ -33,12 +33,15 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, UUID> {
     Page<GiftCard> findBySentByOrderByCreatedAtDesc(String sentBy, Pageable pageable);
 
     /**
+     * Find all gift cards
+     */
+    Page<GiftCard> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    /**
      * Find gift cards with filters
      */
     @Query("SELECT gc FROM GiftCard gc WHERE " +
            "(:status IS NULL OR gc.status = :status) AND " +
-           "(:participantName IS NULL OR LOWER(gc.participant.name) LIKE LOWER(CONCAT('%', :participantName, '%'))) AND " +
-           "(:participantPhone IS NULL OR gc.participant.phone LIKE CONCAT('%', :participantPhone, '%')) AND " +
            "(:sentBy IS NULL OR gc.sentBy = :sentBy) AND " +
            "(:fromDate IS NULL OR gc.createdAt >= :fromDate) AND " +
            "(:toDate IS NULL OR gc.createdAt <= :toDate)")

@@ -6,6 +6,7 @@ import edu.howard.research.smsbackend.security.JwtAuthenticationFilter;
 import edu.howard.research.smsbackend.services.GiftCardService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/gift-cards")
 @RequiredArgsConstructor
+@Slf4j
 public class AdminGiftCardController {
 
     private final GiftCardService giftCardService;
@@ -36,26 +38,20 @@ public class AdminGiftCardController {
     }
 
     /**
-     * Get all gift cards with filters
+     * Get all gift cards
      */
     @GetMapping
     public ResponseEntity<Page<GiftCardDto>> getGiftCards(
-            @RequestParam(required = false) GiftCardStatus status,
-            @RequestParam(required = false) String participantName,
-            @RequestParam(required = false) String participantPhone,
-            @RequestParam(required = false) String sentBy,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
+        log.info("Get gift cards request - page: {}, size: {}", page, size);
+        String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
+        log.info("Admin username: {}", adminUsername);
+
         Pageable pageable = PageRequest.of(page, size);
-        Page<GiftCardDto> giftCards = giftCardService.getGiftCards(
-                status, participantName, participantPhone, sentBy, 
-                fromDate != null ? fromDate.atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null,
-                toDate != null ? toDate.atTime(23, 59, 59).atOffset(java.time.ZoneOffset.UTC) : null,
-                pageable
-        );
+        Page<GiftCardDto> giftCards = giftCardService.getAllGiftCards(pageable);
+        log.info("Returning {} gift cards", giftCards.getTotalElements());
         return ResponseEntity.ok(giftCards);
     }
 
@@ -78,6 +74,15 @@ public class AdminGiftCardController {
     ) {
         // Get admin username from JWT token
         String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
+        
+        // Debug logging
+        log.info("Send gift card request for participant: {}, admin username: {}", participantId, adminUsername);
+        
+        // Check if authentication is valid
+        if ("SYSTEM".equals(adminUsername)) {
+            log.warn("Access denied: No valid authentication found for send gift card request");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         
         GiftCardDto giftCard = giftCardService.sendGiftCard(participantId, request, adminUsername);
         return ResponseEntity.status(HttpStatus.CREATED).body(giftCard);

@@ -44,11 +44,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(auth);
                     log.debug("JWT authentication successful for user: {}", username);
                 } else {
-                    log.warn("Invalid or expired JWT token");
+                    log.warn("Invalid or expired JWT token for request: {}", request.getRequestURI());
                 }
             } catch (Exception e) {
-                log.warn("JWT authentication failed: {}", e.getMessage());
+                log.warn("JWT authentication failed for request {}: {}", request.getRequestURI(), e.getMessage());
             }
+        } else {
+            log.debug("No Authorization header found for request: {}", request.getRequestURI());
         }
         
         filterChain.doFilter(request, response);
@@ -59,6 +61,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      */
     public static String getCurrentUsername() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        log.debug("Current authentication: {}, isAuthenticated: {}, name: {}", 
+                authentication, 
+                authentication != null ? authentication.isAuthenticated() : "null",
+                authentication != null ? authentication.getName() : "null");
+        
         if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getName())) {
             return authentication.getName();
         }

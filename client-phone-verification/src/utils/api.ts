@@ -39,10 +39,59 @@ export const normalizePhoneNumber = (phone: string): string => {
 };
 
 const handleResponse = async (response: Response) => {
-  const data = await response.json();
+  // Log all response details for debugging
+  console.log('Response received:', {
+    status: response.status,
+    statusText: response.statusText,
+    url: response.url,
+    ok: response.ok
+  });
+  
+  // Check if response has content to parse
+  const contentType = response.headers.get('content-type');
+  const hasJsonContent = contentType && contentType.includes('application/json');
+  
+  let data = null;
+  if (hasJsonContent) {
+    try {
+      data = await response.json();
+    } catch (error) {
+      // If JSON parsing fails but response is ok, it might be empty
+      if (response.ok) {
+        return null;
+      }
+      throw error;
+    }
+  }
   
   if (!response.ok) {
-    const error = new Error(data.error || data.message || 'An error occurred') as ApiError;
+    console.error('API Error Response:', {
+      status: response.status,
+      statusText: response.statusText,
+      url: response.url,
+      headers: Object.fromEntries(response.headers.entries()),
+      data: data
+    });
+    
+    let errorMessage = 'An error occurred';
+    
+    if (data?.error) {
+      errorMessage = data.error;
+    } else if (data?.message) {
+      errorMessage = data.message;
+    } else if (response.status === 403) {
+      errorMessage = 'Access denied. Please check your permissions.';
+    } else if (response.status === 400) {
+      errorMessage = 'Invalid request. Please check your input.';
+    } else if (response.status === 404) {
+      errorMessage = 'Resource not found.';
+    } else if (response.status >= 500) {
+      errorMessage = 'Server error. Please try again later.';
+    }
+    
+    console.error('Throwing error:', errorMessage, 'Status:', response.status);
+    
+    const error = new Error(errorMessage) as ApiError;
     error.status = response.status;
     throw error;
   }
@@ -79,6 +128,11 @@ export const api = {
       const token = localStorage.getItem('adminToken');
       if (token) {
         (headers as any)['Authorization'] = `Bearer ${token}`;
+        console.log('POST request to:', endpoint);
+        console.log('Token present:', !!token);
+        console.log('Token (first 20 chars):', token?.substring(0, 20) + '...');
+      } else {
+        console.warn('No admin token found for admin endpoint:', endpoint);
       }
     }
     

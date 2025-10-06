@@ -27,10 +27,15 @@ public interface GiftCardService {
     GiftCardDto sendGiftCard(UUID participantId, SendGiftCardRequest request, String adminUsername);
 
     /**
+     * Get all gift cards
+     */
+    Page<GiftCardDto> getAllGiftCards(Pageable pageable);
+
+    /**
      * Get gift cards with filters
      */
-    Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantName, String participantPhone, 
-                                  String sentBy, java.time.OffsetDateTime fromDate, java.time.OffsetDateTime toDate, 
+    Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantName, String participantPhone,
+                                  String sentBy, java.time.OffsetDateTime fromDate, java.time.OffsetDateTime toDate,
                                   Pageable pageable);
 
     /**

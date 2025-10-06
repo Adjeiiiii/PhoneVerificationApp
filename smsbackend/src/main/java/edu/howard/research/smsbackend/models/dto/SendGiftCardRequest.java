@@ -17,6 +17,9 @@ import java.util.UUID;
 @AllArgsConstructor
 public class SendGiftCardRequest {
     
+    @NotNull(message = "Invitation ID is required")
+    private UUID invitationId;
+    
     @NotNull(message = "Card type is required")
     private GiftCardType cardType;
     

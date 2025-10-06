@@ -91,15 +91,28 @@ public class GiftCardServiceImpl implements GiftCardService {
     @Override
     @Transactional
     public GiftCardDto sendGiftCard(UUID participantId, SendGiftCardRequest request, String adminUsername) {
+        // Get participant
+        Participant participant = participantRepository.findById(participantId)
+                .orElseThrow(() -> new NotFoundException("Participant not found: " + participantId));
+        
+        // Get the invitation by ID from the request
+        SurveyInvitation invitation = invitationRepository.findById(request.getInvitationId())
+                .orElseThrow(() -> new NotFoundException("Invitation not found: " + request.getInvitationId()));
+        
+        // Verify the invitation belongs to this participant
+        if (!invitation.getParticipant().getId().equals(participantId)) {
+            throw new IllegalArgumentException("Invitation does not belong to this participant");
+        }
+        
         // Find or create gift card
-        GiftCard giftCard = giftCardRepository.findByParticipantIdAndInvitationId(participantId, null)
+        GiftCard giftCard = giftCardRepository.findByParticipantIdAndInvitationId(participantId, invitation.getId())
                 .orElseGet(() -> {
                     GiftCard newGiftCard = new GiftCard();
-                    Participant participant = participantRepository.findById(participantId)
-                            .orElseThrow(() -> new NotFoundException("Participant not found: " + participantId));
                     newGiftCard.setParticipant(participant);
+                    newGiftCard.setInvitation(invitation);
                     newGiftCard.setStatus(GiftCardStatus.PENDING);
-                    return giftCardRepository.save(newGiftCard);
+                    // Don't save yet - will be saved after setting all required fields
+                    return newGiftCard;
                 });
 
         // Update gift card details
@@ -116,12 +129,13 @@ public class GiftCardServiceImpl implements GiftCardService {
         giftCard.setSentAt(OffsetDateTime.now());
         giftCard.setStatus(GiftCardStatus.SENT);
 
+        // Save gift card first to get its ID
+        giftCard = giftCardRepository.save(giftCard);
+
         // If from pool, mark pool card as assigned
         if ("POOL".equals(request.getSource()) && request.getPoolId() != null) {
             giftCardPoolRepository.markAssigned(request.getPoolId(), giftCard.getId());
         }
-
-        giftCard = giftCardRepository.save(giftCard);
 
         // Send via email/SMS
         boolean emailSent = false;
@@ -148,11 +162,22 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
-    public Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantName, String participantPhone, 
+    public Page<GiftCardDto> getAllGiftCards(Pageable pageable) {
+        log.info("Getting all gift cards");
+        Page<GiftCard> giftCards = giftCardRepository.findAllByOrderByCreatedAtDesc(pageable);
+        log.info("Found {} gift cards", giftCards.getTotalElements());
+
+        return giftCards.map(this::convertToDto);
+    }
+
+    @Override
+    public Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantName, String participantPhone,
                                          String sentBy, OffsetDateTime fromDate, OffsetDateTime toDate, Pageable pageable) {
-        Page<GiftCard> giftCards = giftCardRepository.findWithFilters(status, participantName, participantPhone, 
+        log.info("Getting gift cards with filters: status={}, sentBy={}, fromDate={}, toDate={}", status, sentBy, fromDate, toDate);
+        Page<GiftCard> giftCards = giftCardRepository.findWithFilters(status, participantName, participantPhone,
                 sentBy, fromDate, toDate, pageable);
-        
+        log.info("Found {} gift cards", giftCards.getTotalElements());
+
         return giftCards.map(this::convertToDto);
     }
 
@@ -512,8 +537,8 @@ public class GiftCardServiceImpl implements GiftCardService {
                 giftCard.getParticipant().getName(),
                 giftCard.getParticipant().getPhone(),
                 giftCard.getParticipant().getEmail(),
-                giftCard.getInvitation().getId(),
-                giftCard.getInvitation().getLinkUrl(),
+                giftCard.getInvitation() != null ? giftCard.getInvitation().getId() : null,
+                giftCard.getInvitation() != null ? giftCard.getInvitation().getLinkUrl() : null,
                 giftCard.getCardCode(),
                 giftCard.getCardType(),
                 giftCard.getCardValue(),
