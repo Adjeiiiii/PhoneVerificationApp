@@ -60,4 +60,9 @@ public interface GiftCardDistributionLogRepository extends JpaRepository<GiftCar
      */
     @Query("SELECT gdl FROM GiftCardDistributionLog gdl WHERE gdl.giftCard.id = :giftCardId ORDER BY gdl.createdAt DESC")
     List<GiftCardDistributionLog> findRecentByGiftCardId(@Param("giftCardId") UUID giftCardId, Pageable pageable);
+
+    /**
+     * Delete all logs for a gift card
+     */
+    void deleteByGiftCardId(UUID giftCardId);
 }

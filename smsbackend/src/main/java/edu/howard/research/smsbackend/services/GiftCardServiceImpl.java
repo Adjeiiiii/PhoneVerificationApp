@@ -133,8 +133,13 @@ public class GiftCardServiceImpl implements GiftCardService {
         giftCard = giftCardRepository.save(giftCard);
 
         // If from pool, mark pool card as assigned
+        log.info("Checking pool assignment - source: {}, poolId: {}", request.getSource(), request.getPoolId());
         if ("POOL".equals(request.getSource()) && request.getPoolId() != null) {
-            giftCardPoolRepository.markAssigned(request.getPoolId(), giftCard.getId());
+            log.info("Marking pool card {} as assigned to gift card {}", request.getPoolId(), giftCard.getId());
+            int updated = giftCardPoolRepository.markAssigned(request.getPoolId(), giftCard.getId());
+            log.info("Pool card marked as assigned - {} rows updated", updated);
+        } else {
+            log.info("Not from pool - source: {}, poolId: {}", request.getSource(), request.getPoolId());
         }
 
         // Send via email/SMS
@@ -403,6 +408,9 @@ public class GiftCardServiceImpl implements GiftCardService {
         if (giftCard.getStatus() == GiftCardStatus.REDEEMED) {
             throw new IllegalStateException("Cannot delete redeemed gift card.");
         }
+
+        // Delete distribution logs first to avoid foreign key constraint violation
+        distributionLogRepository.deleteByGiftCardId(giftCardId);
 
         // If gift card was from pool, mark pool card as available again
         if (giftCard.getPoolId() != null) {

@@ -213,7 +213,14 @@ public class AdminGiftCardController {
      */
     @DeleteMapping("/{giftCardId}")
     public ResponseEntity<Void> deleteGiftCard(@PathVariable UUID giftCardId) {
+        log.info("Delete gift card request for ID: {}", giftCardId);
         String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
+        log.info("Admin username: {}", adminUsername);
+        
+        if ("SYSTEM".equals(adminUsername)) {
+            log.warn("Access denied for delete gift card - no authentication");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         
         giftCardService.deleteGiftCard(giftCardId, adminUsername);
         return ResponseEntity.ok().build();
