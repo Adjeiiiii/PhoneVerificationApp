@@ -14,6 +14,7 @@ import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
 import edu.howard.research.smsbackend.services.EmailService;
+import edu.howard.research.smsbackend.services.GiftCardService;
 import edu.howard.research.smsbackend.services.InvitationsService;
 import edu.howard.research.smsbackend.services.SmsService;
 import edu.howard.research.smsbackend.util.PhoneNumberService;
@@ -42,6 +43,7 @@ public class AdminSurveyController {
     private final ParticipantRepository participantRepo;
     private final GiftCardRepository giftCardRepo;
     private final GiftCardDistributionLogRepository distributionLogRepo;
+    private final GiftCardService giftCardService;
     private final InvitationsService invitationsService;
     private final SmsService smsService;
     private final EmailService emailService;
@@ -664,12 +666,10 @@ public class AdminSurveyController {
             List<GiftCard> giftCards = giftCardRepo.findByInvitationId(id);
             int giftCardCount = giftCards.size();
 
-            // First, delete all gift cards associated with this invitation
+            // First, unsend all gift cards associated with this invitation
             for (GiftCard giftCard : giftCards) {
-                // Delete all distribution logs for this gift card first
-                distributionLogRepo.deleteByGiftCardId(giftCard.getId());
-                // Then delete the gift card
-                giftCardRepo.delete(giftCard);
+                // Unsend the gift card (mark as UNSENT and make available in pool)
+                giftCardService.unsendGiftCard(giftCard.getId(), "SYSTEM_DELETE");
             }
 
             // Reset the link status to AVAILABLE before deleting

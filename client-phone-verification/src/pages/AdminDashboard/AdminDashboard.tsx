@@ -58,6 +58,7 @@ const AdminDashboard: React.FC = () => {
   // For custom delete modals
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteRecord, setDeleteRecord] = useState<VerificationRecord | null>(null);
+  const [deleteGiftCardInfo, setDeleteGiftCardInfo] = useState<any>(null);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showBulkResendModal, setShowBulkResendModal] = useState(false);
   const [showBulkSurveyModal, setShowBulkSurveyModal] = useState(false);
@@ -410,32 +411,47 @@ const AdminDashboard: React.FC = () => {
   };
 
   // Single delete user
-  const confirmDeleteUser = (rec: VerificationRecord) => {
+  const confirmDeleteUser = async (rec: VerificationRecord) => {
     setDeleteRecord(rec);
+    
+    // Check for gift cards first
+    try {
+      const giftCardInfo = await api.getUserDeletionInfo(rec.id);
+      setDeleteGiftCardInfo(giftCardInfo);
+    } catch (error) {
+      console.error('Error checking gift cards:', error);
+      setDeleteGiftCardInfo({ hasGiftCards: false, giftCardCount: 0 });
+    }
+    
     setShowDeleteModal(true);
   };
 
   const closeDeleteModal = () => {
     setDeleteRecord(null);
+    setDeleteGiftCardInfo(null);
     setShowDeleteModal(false);
   };
 
   const proceedDelete = () => {
     if (!deleteRecord) return;
-    const token = localStorage.getItem('adminToken');
-    if (!token) return;
 
-    api.delete(`/api/admin/delete-user/${deleteRecord.id}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(() => {
+    api.deleteUser(deleteRecord.id)
+      .then((response) => {
         // Refresh data immediately
         fetchStatsAndRecords();
         // Close both modals and clear records
         setShowDeleteModal(false);
         setShowEditModal(false);
         setDeleteRecord(null);
+        setDeleteGiftCardInfo(null);
         setEditRecord(null);
-        // Show success message
-        setBulkActionMessage('User deleted successfully');
+        
+        // Show success message with gift card info if applicable
+        let message = 'User deleted successfully';
+        if (response.giftCardsDeleted && response.giftCardsDeleted > 0) {
+          message += `. ${response.giftCardsDeleted} gift card(s) have been made available again and will appear in the unsent history.`;
+        }
+        setBulkActionMessage(message);
       })
       .catch((err) => {
         console.error('Delete error:', err);
@@ -937,7 +953,7 @@ const AdminDashboard: React.FC = () => {
 
       {showDeleteModal && deleteRecord && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full">
             <h3 className="text-lg font-semibold mb-2">Confirm Deletion</h3>
             <p className="text-sm text-gray-700 mb-3">
               Are you sure you want to delete this user record?
@@ -946,6 +962,49 @@ const AdminDashboard: React.FC = () => {
               Phone: {deleteRecord.phone_number} <br />
               Email: {deleteRecord.email}
             </p>
+            
+            {/* Gift Card Warning */}
+            {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-yellow-800">
+                      Warning: User has {deleteGiftCardInfo.giftCardCount} gift card(s)
+                    </h3>
+                    <div className="mt-2 text-sm text-yellow-700">
+                      <p className="mb-2">
+                        This user has been assigned gift card(s). Deleting them will:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Make the gift card(s) available again in the pool</li>
+                        <li>Add the gift card(s) to the unsent history for tracking</li>
+                        <li>Remove the user's access to the gift card(s)</li>
+                      </ul>
+                      {deleteGiftCardInfo.giftCards && deleteGiftCardInfo.giftCards.length > 0 && (
+                        <div className="mt-3">
+                          <p className="font-medium">Gift Card Details:</p>
+                          <div className="mt-1 space-y-1">
+                            {deleteGiftCardInfo.giftCards.map((gc: any, index: number) => (
+                              <div key={index} className="text-xs bg-yellow-100 p-2 rounded">
+                                <span className="font-medium">{gc.cardCode}</span> - {gc.cardType} (${gc.cardValue})
+                                {gc.status === 'SENT' && <span className="ml-2 text-green-600">• Sent</span>}
+                                {gc.status === 'UNSENT' && <span className="ml-2 text-gray-600">• Unsent</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="flex justify-end gap-2">
               <button
                 className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
@@ -957,7 +1016,7 @@ const AdminDashboard: React.FC = () => {
                 className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-md text-sm"
                 onClick={proceedDelete}
               >
-                Delete
+                {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards ? 'Delete & Make Gift Cards Available' : 'Delete'}
               </button>
             </div>
           </div>

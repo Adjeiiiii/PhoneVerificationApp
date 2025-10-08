@@ -369,7 +369,7 @@ const Survey: React.FC = () => {
                 {/* Opt-in message for Twilio compliance */}
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-md mb-4">
                   <p className="text-sm text-blue-800">
-                    By providing your phone number, you agree to receive up to 2 text messages from the Healthcare AI Research Study for verification and survey delivery. Message and data rates may apply. Reply STOP to opt-out anytime.
+                    By providing your phone number, you agree to receive text messages from the Healthcare AI Research Study for verification and survey delivery. Message and data rates may apply. Reply STOP to opt-out anytime.
                   </p>
                 </div>
                 <div className="space-y-4">
@@ -416,7 +416,7 @@ const Survey: React.FC = () => {
                     </p>
                     <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                       <p className="text-sm text-yellow-800">
-                        <span className="font-medium">📧 Email Notice:</span> If you haven't received our email, kindly check your spam or junk folder.
+                        <span className="font-medium">📧 Email Notice:</span> Our email may appear in your spam or junk folder. Please check there if you don't see it in your inbox.
                       </p>
                     </div>
                   </div>

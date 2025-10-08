@@ -327,4 +327,13 @@ export const api = {
   bulkMarkSurveysUncompleted: async (invitationIds: string[]) => {
     return api.post('/api/admin/invitations/bulk-uncomplete', invitationIds);
   },
+
+  // User deletion API calls
+  getUserDeletionInfo: async (userId: string) => {
+    return api.get(`/api/admin/delete-user-info/${userId}`);
+  },
+
+  deleteUser: async (userId: string) => {
+    return api.delete(`/api/admin/delete-user/${userId}`);
+  },
 };

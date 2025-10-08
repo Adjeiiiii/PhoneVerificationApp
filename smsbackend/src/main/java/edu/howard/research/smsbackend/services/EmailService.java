@@ -132,10 +132,6 @@ public class EmailService {
                     
                     <p>Thank you for participating in our research study. Here's your survey link:</p>
                     
-                    <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 10px; margin: 15px 0; color: #856404;">
-                        <strong>📧 Email Notice:</strong> If you don't see this email in your inbox, please check your spam/junk folder. Our emails may sometimes be filtered there.
-                    </div>
-                    
                     <div style="background-color: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
                         <a href="%s" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
                             Take Survey Now
