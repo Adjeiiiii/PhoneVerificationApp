@@ -50,7 +50,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 log.warn("JWT authentication failed for request {}: {}", request.getRequestURI(), e.getMessage());
             }
         } else {
-            log.debug("No Authorization header found for request: {}", request.getRequestURI());
+            log.debug("No valid Authorization header for request: {}", request.getRequestURI());
         }
         
         filterChain.doFilter(request, response);

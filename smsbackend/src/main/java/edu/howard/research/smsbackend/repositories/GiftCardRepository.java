@@ -40,13 +40,15 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, UUID> {
     /**
      * Find gift cards with filters
      */
-    @Query("SELECT gc FROM GiftCard gc WHERE " +
+    @Query("SELECT gc FROM GiftCard gc " +
+           "JOIN gc.participant p " +
+           "WHERE " +
            "(:status IS NULL OR gc.status = :status) AND " +
+           "(:participantPhone IS NULL OR p.phone = :participantPhone) AND " +
            "(:sentBy IS NULL OR gc.sentBy = :sentBy) AND " +
            "(:fromDate IS NULL OR gc.createdAt >= :fromDate) AND " +
            "(:toDate IS NULL OR gc.createdAt <= :toDate)")
     Page<GiftCard> findWithFilters(@Param("status") GiftCardStatus status,
-                                   @Param("participantName") String participantName,
                                    @Param("participantPhone") String participantPhone,
                                    @Param("sentBy") String sentBy,
                                    @Param("fromDate") OffsetDateTime fromDate,

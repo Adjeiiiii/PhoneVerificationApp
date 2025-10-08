@@ -6,5 +6,6 @@ public enum GiftCardStatus {
     DELIVERED,  // Confirmed delivered via email/SMS
     REDEEMED,   // Participant has redeemed the gift card
     EXPIRED,    // Gift card has expired
-    FAILED      // Failed to send or deliver
+    FAILED,     // Failed to send or deliver
+    UNSENT      // Gift card was unsent/revoked by admin
 }

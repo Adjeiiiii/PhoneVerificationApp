@@ -176,10 +176,19 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
-    public Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantName, String participantPhone,
+    public Page<GiftCardDto> getGiftCardsByStatus(GiftCardStatus status, Pageable pageable) {
+        log.info("Getting gift cards with status: {}", status);
+        Page<GiftCard> giftCards = giftCardRepository.findByStatusOrderByCreatedAtDesc(status, pageable);
+        log.info("Found {} gift cards with status {}", giftCards.getTotalElements(), status);
+
+        return giftCards.map(this::convertToDto);
+    }
+
+    @Override
+    public Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantPhone,
                                          String sentBy, OffsetDateTime fromDate, OffsetDateTime toDate, Pageable pageable) {
         log.info("Getting gift cards with filters: status={}, sentBy={}, fromDate={}, toDate={}", status, sentBy, fromDate, toDate);
-        Page<GiftCard> giftCards = giftCardRepository.findWithFilters(status, participantName, participantPhone,
+        Page<GiftCard> giftCards = giftCardRepository.findWithFilters(status, participantPhone,
                 sentBy, fromDate, toDate, pageable);
         log.info("Found {} gift cards", giftCards.getTotalElements());
 
@@ -394,6 +403,7 @@ public class GiftCardServiceImpl implements GiftCardService {
             throw new IllegalStateException("Cannot delete assigned gift card. Please unassign first.");
         }
 
+        // No logging needed for pool deletions - these are never sent to participants
         giftCardPoolRepository.delete(poolCard);
         
         log.info("Gift card {} deleted from pool by admin {}", poolCard.getCardCode(), adminUsername);
@@ -401,16 +411,19 @@ public class GiftCardServiceImpl implements GiftCardService {
 
     @Override
     @Transactional
-    public void deleteGiftCard(UUID giftCardId, String adminUsername) {
+    public void unsendGiftCard(UUID giftCardId, String adminUsername) {
+        log.info("Unsending gift card: {} by admin: {}", giftCardId, adminUsername);
+        
         GiftCard giftCard = giftCardRepository.findById(giftCardId)
                 .orElseThrow(() -> new NotFoundException("Gift card not found: " + giftCardId));
 
         if (giftCard.getStatus() == GiftCardStatus.REDEEMED) {
-            throw new IllegalStateException("Cannot delete redeemed gift card.");
+            throw new IllegalStateException("Cannot unsend redeemed gift card.");
         }
 
-        // Delete distribution logs first to avoid foreign key constraint violation
-        distributionLogRepository.deleteByGiftCardId(giftCardId);
+        if (giftCard.getStatus() == GiftCardStatus.UNSENT) {
+            throw new IllegalStateException("Gift card is already unsent.");
+        }
 
         // If gift card was from pool, mark pool card as available again
         if (giftCard.getPoolId() != null) {
@@ -422,9 +435,79 @@ public class GiftCardServiceImpl implements GiftCardService {
             });
         }
 
-        giftCardRepository.delete(giftCard);
+        // Log the UNSENT action with details
+        Map<String, Object> details = new HashMap<>();
+        details.put("card_code", giftCard.getCardCode());
+        details.put("card_type", giftCard.getCardType());
+        details.put("card_value", giftCard.getCardValue());
+        details.put("previous_status", giftCard.getStatus());
+        details.put("participant_phone", giftCard.getParticipant().getPhone());
+        if (giftCard.getParticipant().getEmail() != null) {
+            details.put("participant_email", giftCard.getParticipant().getEmail());
+        }
+        if (giftCard.getParticipant().getName() != null) {
+            details.put("participant_name", giftCard.getParticipant().getName());
+        }
+        if (giftCard.getPoolId() != null) {
+            details.put("pool_id", giftCard.getPoolId().toString());
+        }
+        if (giftCard.getSentAt() != null) {
+            details.put("sent_at", giftCard.getSentAt().toString());
+        }
+        if (giftCard.getSentBy() != null) {
+            details.put("sent_by", giftCard.getSentBy());
+        }
+        details.put("source", giftCard.getSource());
+
+        logDistributionAction(giftCardId, DistributionAction.UNSENT, adminUsername, details);
+
+        // Mark the gift card as UNSENT instead of deleting it
+        giftCard.setStatus(GiftCardStatus.UNSENT);
+        giftCardRepository.save(giftCard);
         
-        log.info("Gift card {} deleted by admin {}", giftCard.getCardCode(), adminUsername);
+        log.info("Gift card {} unsent by admin {}", giftCard.getCardCode(), adminUsername);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<UnsentGiftCardDto> getUnsentGiftCards(Pageable pageable) {
+        Page<GiftCard> unsentGiftCards = giftCardRepository.findByStatusOrderByCreatedAtDesc(
+                GiftCardStatus.UNSENT, pageable);
+
+        return unsentGiftCards.map(giftCard -> {
+            UnsentGiftCardDto dto = new UnsentGiftCardDto();
+            
+            dto.setCardCode(giftCard.getCardCode());
+            dto.setCardType(giftCard.getCardType().toString());
+            dto.setCardValue(giftCard.getCardValue());
+            dto.setStatus(giftCard.getStatus().toString());
+            dto.setParticipantPhone(giftCard.getParticipant().getPhone());
+            dto.setParticipantEmail(giftCard.getParticipant().getEmail());
+            dto.setParticipantName(giftCard.getParticipant().getName());
+            if (giftCard.getSentAt() != null) {
+                dto.setSentAt(giftCard.getSentAt().toString());
+            }
+            dto.setSentBy(giftCard.getSentBy());
+            dto.setSource(giftCard.getSource());
+            if (giftCard.getPoolId() != null) {
+                dto.setPoolId(giftCard.getPoolId().toString());
+            }
+            
+            // Get the UNSENT log to find who unsent it and when
+            List<GiftCardDistributionLog> unsentLogs = distributionLogRepository.findByGiftCardIdOrderByCreatedAtDesc(giftCard.getId());
+            GiftCardDistributionLog unsentLog = unsentLogs.stream()
+                    .filter(log -> log.getAction() == DistributionAction.UNSENT)
+                    .findFirst()
+                    .orElse(null);
+            
+            if (unsentLog != null) {
+                dto.setUnsentBy(unsentLog.getPerformedBy());
+                dto.setUnsentAt(unsentLog.getCreatedAt());
+                dto.setDetails(unsentLog.getDetails());
+            }
+            
+            return dto;
+        });
     }
 
     // Helper methods
@@ -527,15 +610,16 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     private void logDistributionAction(UUID giftCardId, DistributionAction action, String performedBy, Map<String, Object> details) {
-        GiftCardDistributionLog log = new GiftCardDistributionLog();
+        GiftCardDistributionLog distributionLog = new GiftCardDistributionLog();
         GiftCard giftCard = new GiftCard();
         giftCard.setId(giftCardId);
-        log.setGiftCard(giftCard);
-        log.setAction(action);
-        log.setPerformedBy(performedBy);
-        log.setDetails(details);
+        distributionLog.setGiftCard(giftCard);
+        distributionLog.setAction(action);
+        distributionLog.setPerformedBy(performedBy);
+        distributionLog.setDetails(details);
         
-        distributionLogRepository.save(log);
+        distributionLogRepository.save(distributionLog);
+        log.debug("Logged {} action for gift card: {}", action, giftCardId);
     }
 
     private GiftCardDto convertToDto(GiftCard giftCard) {

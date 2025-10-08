@@ -45,13 +45,23 @@ public class AdminGiftCardController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        log.info("Get gift cards request - page: {}, size: {}", page, size);
-        String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
-        log.info("Admin username: {}", adminUsername);
-
+        log.debug("Get gift cards request - page: {}, size: {}", page, size);
         Pageable pageable = PageRequest.of(page, size);
         Page<GiftCardDto> giftCards = giftCardService.getAllGiftCards(pageable);
-        log.info("Returning {} gift cards", giftCards.getTotalElements());
+        return ResponseEntity.ok(giftCards);
+    }
+
+    /**
+     * Get sent gift cards only
+     */
+    @GetMapping("/sent")
+    public ResponseEntity<Page<GiftCardDto>> getSentGiftCards(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        log.debug("Get sent gift cards request - page: {}, size: {}", page, size);
+        Pageable pageable = PageRequest.of(page, size);
+        Page<GiftCardDto> giftCards = giftCardService.getGiftCardsByStatus(GiftCardStatus.SENT, pageable);
         return ResponseEntity.ok(giftCards);
     }
 
@@ -72,18 +82,9 @@ public class AdminGiftCardController {
             @PathVariable UUID participantId,
             @Valid @RequestBody SendGiftCardRequest request
     ) {
-        // Get admin username from JWT token
         String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
-        
-        // Debug logging
-        log.info("Send gift card request for participant: {}, admin username: {}", participantId, adminUsername);
-        
-        // Check if authentication is valid
-        if ("SYSTEM".equals(adminUsername)) {
-            log.warn("Access denied: No valid authentication found for send gift card request");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-        
+        log.info("Send gift card request for participant: {}, admin: {}", participantId, adminUsername);
+
         GiftCardDto giftCard = giftCardService.sendGiftCard(participantId, request, adminUsername);
         return ResponseEntity.status(HttpStatus.CREATED).body(giftCard);
     }
@@ -198,6 +199,19 @@ public class AdminGiftCardController {
     }
 
     /**
+     * Get unsent gift cards history
+     */
+    @GetMapping("/unsent")
+    public ResponseEntity<Page<UnsentGiftCardDto>> getUnsentGiftCards(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<UnsentGiftCardDto> unsentGiftCards = giftCardService.getUnsentGiftCards(pageable);
+        return ResponseEntity.ok(unsentGiftCards);
+    }
+
+    /**
      * Delete gift card from pool
      */
     @DeleteMapping("/pool/{poolId}")
@@ -209,20 +223,18 @@ public class AdminGiftCardController {
     }
 
     /**
-     * Delete sent gift card
+     * Unsend gift card (mark as unsent and make available again)
      */
-    @DeleteMapping("/{giftCardId}")
-    public ResponseEntity<Void> deleteGiftCard(@PathVariable UUID giftCardId) {
-        log.info("Delete gift card request for ID: {}", giftCardId);
+    @PostMapping("/{giftCardId}/unsend")
+    public ResponseEntity<Void> unsendGiftCard(@PathVariable UUID giftCardId) {
+        log.info("Unsend gift card request for ID: {}", giftCardId);
+        
         String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
-        log.info("Admin username: {}", adminUsername);
+        log.info("Admin username from JWT: {}", adminUsername);
         
-        if ("SYSTEM".equals(adminUsername)) {
-            log.warn("Access denied for delete gift card - no authentication");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
+        giftCardService.unsendGiftCard(giftCardId, adminUsername);
+        log.info("Gift card unsent successfully");
         
-        giftCardService.deleteGiftCard(giftCardId, adminUsername);
         return ResponseEntity.ok().build();
     }
 }

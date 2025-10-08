@@ -13,5 +13,6 @@ public enum DistributionAction {
     EXPIRED,           // Gift card expired
     ADMIN_NOTES,       // Admin added notes
     RESENT,            // Gift card resent
-    STATUS_UPDATED     // Status manually updated
+    STATUS_UPDATED,    // Status manually updated
+    UNSENT             // Gift card unsent/revoked by admin (after being sent)
 }

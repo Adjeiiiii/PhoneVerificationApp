@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Footer from '../Footer/Footer';
-import Navbar from '../NavBar/Navbar';
 import AdminNavigation from '../../components/AdminNavigation';
 import { api } from '../../utils/api';
+import Footer from '../Footer/Footer';
+import Navbar from '../NavBar/Navbar';
 
 interface GiftCardPoolStatus {
   totalCards: number;
@@ -29,6 +29,7 @@ interface GiftCardPool {
   expiresAt: string;
   assignedAt: string | null;
   assignedToGiftCardId: string | null;
+  notes?: string;
 }
 
 interface EligibleParticipant {
@@ -66,9 +67,26 @@ interface GiftCard {
   updatedAt: string;
 }
 
+interface UnsentGiftCard {
+  cardCode: string;
+  cardType: string;
+  cardValue: number;
+  status: string;
+  participantPhone: string;
+  participantEmail: string;
+  participantName: string;
+  sentAt: string;
+  sentBy: string;
+  source: string;
+  poolId: string;
+  unsentBy: string;
+  unsentAt: string;
+  details: any;
+}
+
 const GiftCardManagement: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'pool' | 'eligible' | 'sent'>('pool');
+  const [activeTab, setActiveTab] = useState<'pool' | 'eligible' | 'sent' | 'unsent'>('pool');
   
   // Pool status and cards
   const [poolStatus, setPoolStatus] = useState<GiftCardPoolStatus | null>(null);
@@ -84,11 +102,17 @@ const GiftCardManagement: React.FC = () => {
   const [sentPage, setSentPage] = useState(0);
   const [sentTotalPages, setSentTotalPages] = useState(0);
   
+  // Unsent gift cards
+  const [unsentGiftCards, setUnsentGiftCards] = useState<UnsentGiftCard[]>([]);
+  const [unsentPage, setUnsentPage] = useState(0);
+  const [unsentTotalPages, setUnsentTotalPages] = useState(0);
+  
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [confirmationText, setConfirmationText] = useState('');
   
   // Form data
   const [newGiftCard, setNewGiftCard] = useState({
@@ -186,6 +210,8 @@ const GiftCardManagement: React.FC = () => {
       fetchEligibleParticipants();
     } else if (activeTab === 'sent') {
       fetchSentGiftCards();
+    } else if (activeTab === 'unsent') {
+      fetchUnsentGiftCards();
     }
   }, [activeTab]);
 
@@ -228,11 +254,21 @@ const GiftCardManagement: React.FC = () => {
 
   const fetchSentGiftCards = async () => {
     try {
-      const response = await api.getGiftCards({ page: sentPage, size: 20 });
+      const response = await api.getSentGiftCards(sentPage, 20);
       setSentGiftCards(response.content || []);
       setSentTotalPages(response.totalPages || 0);
     } catch (error) {
       console.error('Error fetching sent gift cards:', error);
+    }
+  };
+
+  const fetchUnsentGiftCards = async () => {
+    try {
+      const response = await api.getUnsentGiftCards(unsentPage, 20);
+      setUnsentGiftCards(response.content || []);
+      setUnsentTotalPages(response.totalPages || 0);
+    } catch (error) {
+      console.error('Error fetching unsent gift cards:', error);
     }
   };
 
@@ -418,7 +454,7 @@ const GiftCardManagement: React.FC = () => {
   const handleDeleteSentCard = async () => {
     if (!selectedItem) return;
 
-    console.log('Selected sent card for deletion:', selectedItem);
+    console.log('Selected sent card for unsending:', selectedItem);
     console.log('Selected sent card ID:', selectedItem.id, 'Type:', typeof selectedItem.id);
 
     // Validate that the ID is a valid UUID
@@ -427,23 +463,32 @@ const GiftCardManagement: React.FC = () => {
       setMessage({ type: 'error', text: `Invalid gift card ID format: ${selectedItem.id}. Please refresh the page and try again.` });
       setShowDeleteModal(false);
       setSelectedItem(null);
+      setConfirmationText('');
+      return;
+    }
+
+    // Check if confirmation text matches
+    if (confirmationText !== 'UNSEND') {
+      setMessage({ type: 'error', text: 'Please type UNSEND to confirm' });
       return;
     }
 
     setLoading(true);
     try {
-      console.log('Attempting to delete sent gift card with ID:', selectedItem.id);
-      await api.deleteGiftCard(selectedItem.id);
+      console.log('Attempting to unsend gift card with ID:', selectedItem.id);
+      await api.unsendGiftCard(selectedItem.id);
       
-      setMessage({ type: 'success', text: 'Gift card deleted successfully!' });
+      setMessage({ type: 'success', text: 'Gift card unsent successfully!' });
       setShowDeleteModal(false);
       setSelectedItem(null);
+      setConfirmationText('');
       
       // Refresh the data
       await fetchSentGiftCards();
+      await fetchUnsentGiftCards();
     } catch (error: any) {
-      console.error('Delete sent card error details:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to delete gift card' });
+      console.error('Unsend gift card error details:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to unsend gift card' });
     } finally {
       setLoading(false);
     }
@@ -537,6 +582,16 @@ const GiftCardManagement: React.FC = () => {
                 }`}
               >
                 Sent Gift Cards
+              </button>
+              <button
+                onClick={() => setActiveTab('unsent')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'unsent'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Unsent History
               </button>
             </nav>
           </div>
@@ -845,11 +900,12 @@ const GiftCardManagement: React.FC = () => {
                             <button
                               onClick={() => {
                                 setSelectedItem(card);
+                                setConfirmationText('');
                                 setShowDeleteModal(true);
                               }}
                               className="text-red-600 hover:text-red-900"
                             >
-                              Delete
+                              Unsend
                             </button>
                           </td>
                         </tr>
@@ -857,6 +913,99 @@ const GiftCardManagement: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {/* Unsent Gift Cards Tab */}
+            {activeTab === 'unsent' && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Unsent Gift Cards History</h2>
+                  <p className="text-sm text-gray-600">
+                    Gift cards that were sent to participants but then revoked/unsent by admins
+                  </p>
+                </div>
+
+                {unsentGiftCards.length === 0 ? (
+                  <div className="text-center py-12">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No unsent gift cards</h3>
+                    <p className="mt-1 text-sm text-gray-500">No gift cards have been unsent yet.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Card Code
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Type
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Value
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Participant
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Originally Sent By
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Originally Sent At
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Unsent By
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Unsent At
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {unsentGiftCards.map((card, index) => (
+                          <tr key={index}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {card.cardCode}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {card.cardType}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {formatCurrency(card.cardValue)}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-500">
+                              <div className="flex flex-col">
+                                {card.participantName && (
+                                  <span className="font-medium text-gray-900">{card.participantName}</span>
+                                )}
+                                <span>{card.participantPhone}</span>
+                                {card.participantEmail && (
+                                  <span className="text-xs text-gray-400">{card.participantEmail}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {card.sentBy || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {card.sentAt ? formatDate(card.sentAt) : 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {card.unsentBy}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {card.unsentAt ? formatDate(card.unsentAt) : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1458,31 +1607,106 @@ const GiftCardManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete/Unsend Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-[55]">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
             <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Delete</h3>
-              <p className="text-sm text-gray-600 mb-6">
-                Are you sure you want to delete this gift card? This action cannot be undone.
-              </p>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={activeTab === 'pool' ? handleDeletePoolCard : handleDeleteSentCard}
-                  disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
-                >
-                  {loading ? 'Deleting...' : 'Delete'}
-                </button>
-              </div>
+              {activeTab === 'pool' ? (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Delete</h3>
+                  <p className="text-sm text-gray-600 mb-6">
+                    Are you sure you want to delete this gift card from the pool? This action cannot be undone.
+                  </p>
+                  
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowDeleteModal(false);
+                        setSelectedItem(null);
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeletePoolCard}
+                      disabled={loading}
+                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {loading ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start mb-4">
+                    <div className="flex-shrink-0">
+                      <svg className="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-lg font-medium text-gray-900">Unsend Gift Card</h3>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-yellow-800">
+                          Warning: Participant May Have Already Redeemed
+                        </h3>
+                        <div className="mt-2 text-sm text-yellow-700">
+                          <p>
+                            This action will remove the gift card from our system, but the participant may have already viewed, saved, or redeemed it. 
+                            Unsending does NOT prevent redemption if they already have the code.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Type <span className="font-bold text-red-600">UNSEND</span> to confirm:
+                    </label>
+                    <input
+                      type="text"
+                      value={confirmationText}
+                      onChange={(e) => setConfirmationText(e.target.value)}
+                      placeholder="Type UNSEND here"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      autoFocus
+                    />
+                  </div>
+                  
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowDeleteModal(false);
+                        setSelectedItem(null);
+                        setConfirmationText('');
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteSentCard}
+                      disabled={loading || confirmationText !== 'UNSEND'}
+                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Unsending...' : 'Unsend Gift Card'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

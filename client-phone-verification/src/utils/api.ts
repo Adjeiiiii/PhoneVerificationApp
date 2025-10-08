@@ -256,6 +256,10 @@ export const api = {
     return api.get(`/api/admin/gift-cards?${params.toString()}`);
   },
 
+  getSentGiftCards: async (page = 0, size = 20) => {
+    return api.get(`/api/admin/gift-cards/sent?page=${page}&size=${size}`);
+  },
+
   addGiftCardToPool: async (giftCard: any) => {
     return api.post('/api/admin/gift-cards/pool/add', giftCard);
   },
@@ -295,8 +299,12 @@ export const api = {
     return api.delete(`/api/admin/gift-cards/pool/${poolId}`);
   },
 
-  deleteGiftCard: async (giftCardId: string) => {
-    return api.delete(`/api/admin/gift-cards/${giftCardId}`);
+  unsendGiftCard: async (giftCardId: string) => {
+    return api.post(`/api/admin/gift-cards/${giftCardId}/unsend`);
+  },
+
+  getUnsentGiftCards: async (page = 0, size = 20) => {
+    return api.get(`/api/admin/gift-cards/unsent?page=${page}&size=${size}`);
   },
 
   getGiftCardDistributionLogs: async (giftCardId: string) => {

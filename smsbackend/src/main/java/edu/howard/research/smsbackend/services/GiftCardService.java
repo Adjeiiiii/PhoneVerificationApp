@@ -32,11 +32,16 @@ public interface GiftCardService {
     Page<GiftCardDto> getAllGiftCards(Pageable pageable);
 
     /**
+     * Get gift cards by status
+     */
+    Page<GiftCardDto> getGiftCardsByStatus(GiftCardStatus status, Pageable pageable);
+
+    /**
      * Get gift cards with filters
      */
-    Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantName, String participantPhone,
-                                  String sentBy, java.time.OffsetDateTime fromDate, java.time.OffsetDateTime toDate,
-                                  Pageable pageable);
+    Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantPhone,
+                                   String sentBy, java.time.OffsetDateTime fromDate, java.time.OffsetDateTime toDate,
+                                   Pageable pageable);
 
     /**
      * Get gift card by ID
@@ -94,12 +99,17 @@ public interface GiftCardService {
     byte[] exportUsedGiftCards();
 
     /**
-     * Delete gift card from pool
+     * Delete gift card from pool (for cards never sent to users)
      */
     void deleteGiftCardFromPool(UUID poolId, String adminUsername);
 
     /**
-     * Delete sent gift card (mark as cancelled)
+     * Unsend gift card (mark as unsent and make available again)
      */
-    void deleteGiftCard(UUID giftCardId, String adminUsername);
+    void unsendGiftCard(UUID giftCardId, String adminUsername);
+
+    /**
+     * Get unsent gift cards history
+     */
+    Page<UnsentGiftCardDto> getUnsentGiftCards(Pageable pageable);
 }
