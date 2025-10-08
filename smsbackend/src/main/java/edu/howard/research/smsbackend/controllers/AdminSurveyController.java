@@ -583,6 +583,59 @@ public class AdminSurveyController {
         }
     }
 
+    // ---------- Get user deletion info (check for gift cards) ----------
+    @GetMapping("/delete-user-info/{id}")
+    public ResponseEntity<?> getUserDeletionInfo(
+            @PathVariable UUID id,
+            HttpServletRequest request
+    ) {
+        // Check authentication
+        if (!isValidAdminToken(request)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized access"));
+        }
+
+        try {
+            // Find the invitation by ID
+            Optional<SurveyInvitation> invitationOpt = inviteRepo.findById(id);
+            if (invitationOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            SurveyInvitation invitation = invitationOpt.get();
+            Participant participant = invitation.getParticipant();
+
+            // Check for associated gift cards
+            List<GiftCard> giftCards = giftCardRepo.findByInvitationId(id);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("hasGiftCards", !giftCards.isEmpty());
+            response.put("giftCardCount", giftCards.size());
+            
+            if (!giftCards.isEmpty()) {
+                List<Map<String, Object>> giftCardInfo = giftCards.stream()
+                    .map(gc -> {
+                        Map<String, Object> info = new HashMap<>();
+                        info.put("cardCode", gc.getCardCode());
+                        info.put("cardType", gc.getCardType().toString());
+                        info.put("cardValue", gc.getCardValue());
+                        info.put("status", gc.getStatus().toString());
+                        info.put("sentAt", gc.getSentAt());
+                        info.put("sentBy", gc.getSentBy());
+                        return info;
+                    })
+                    .collect(Collectors.toList());
+                response.put("giftCards", giftCardInfo);
+            }
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Failed to get user deletion info: " + e.getMessage()));
+        }
+    }
+
     // ---------- Delete user/participant ----------
     @DeleteMapping("/delete-user/{id}")
     @Transactional
@@ -607,8 +660,11 @@ public class AdminSurveyController {
             Participant participant = invitation.getParticipant();
             SurveyLinkPool link = invitation.getLink();
 
-            // First, delete all gift cards associated with this invitation
+            // Get gift cards info before deletion for response
             List<GiftCard> giftCards = giftCardRepo.findByInvitationId(id);
+            int giftCardCount = giftCards.size();
+
+            // First, delete all gift cards associated with this invitation
             for (GiftCard giftCard : giftCards) {
                 // Delete all distribution logs for this gift card first
                 distributionLogRepo.deleteByGiftCardId(giftCard.getId());
@@ -628,11 +684,17 @@ public class AdminSurveyController {
             // Then delete the participant
             participantRepo.delete(participant);
 
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "User deleted successfully",
-                "deletedId", id
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "User deleted successfully");
+            response.put("deletedId", id);
+            
+            if (giftCardCount > 0) {
+                response.put("giftCardsDeleted", giftCardCount);
+                response.put("giftCardsAvailable", "The gift cards have been made available again and will appear in the unsent history.");
+            }
+
+            return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             return ResponseEntity.badRequest()
