@@ -681,11 +681,8 @@ public class AdminSurveyController {
                 linkRepo.save(link);
             }
 
-            // Delete gift cards first to avoid foreign key constraints
+            // Delete gift cards (distribution logs will be cascade deleted)
             for (GiftCard giftCard : giftCards) {
-                // Delete distribution logs first
-                distributionLogRepo.deleteByGiftCardId(giftCard.getId());
-                // Then delete the gift card
                 giftCardRepo.delete(giftCard);
             }
 
