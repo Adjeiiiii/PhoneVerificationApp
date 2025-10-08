@@ -3,6 +3,7 @@ package edu.howard.research.smsbackend.controllers;
 import edu.howard.research.smsbackend.models.dto.LinkUploadRequest;
 import edu.howard.research.smsbackend.models.dto.UploadResult;
 import edu.howard.research.smsbackend.models.entities.GiftCard;
+import edu.howard.research.smsbackend.models.entities.GiftCardStatus;
 import edu.howard.research.smsbackend.models.entities.LinkStatus;
 import edu.howard.research.smsbackend.models.entities.Participant;
 import edu.howard.research.smsbackend.models.entities.ParticipantStatus;
@@ -668,8 +669,10 @@ public class AdminSurveyController {
 
             // First, unsend all gift cards associated with this invitation
             for (GiftCard giftCard : giftCards) {
-                // Unsend the gift card (mark as UNSENT and make available in pool)
-                giftCardService.unsendGiftCard(giftCard.getId(), "SYSTEM_DELETE");
+                // Only unsend if not already unsent
+                if (giftCard.getStatus() != GiftCardStatus.UNSENT) {
+                    giftCardService.unsendGiftCard(giftCard.getId(), "SYSTEM_DELETE");
+                }
             }
 
             // Reset the link status to AVAILABLE before deleting
@@ -678,7 +681,15 @@ public class AdminSurveyController {
                 linkRepo.save(link);
             }
 
-            // Delete the invitation (now safe since gift cards are deleted)
+            // Delete gift cards first to avoid foreign key constraints
+            for (GiftCard giftCard : giftCards) {
+                // Delete distribution logs first
+                distributionLogRepo.deleteByGiftCardId(giftCard.getId());
+                // Then delete the gift card
+                giftCardRepo.delete(giftCard);
+            }
+
+            // Delete the invitation
             inviteRepo.delete(invitation);
             
             // Then delete the participant
