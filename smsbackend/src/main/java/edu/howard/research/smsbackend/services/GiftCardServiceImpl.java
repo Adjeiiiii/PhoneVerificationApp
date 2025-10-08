@@ -471,10 +471,12 @@ public class GiftCardServiceImpl implements GiftCardService {
     @Override
     @Transactional(readOnly = true)
     public Page<UnsentGiftCardDto> getUnsentGiftCards(Pageable pageable) {
-        Page<GiftCard> unsentGiftCards = giftCardRepository.findByStatusOrderByCreatedAtDesc(
-                GiftCardStatus.UNSENT, pageable);
+        // Find gift cards that have ever been unsent (have UNSENT distribution log)
+        Page<GiftCardDistributionLog> unsentLogs = distributionLogRepository.findByActionOrderByCreatedAtDesc(
+                DistributionAction.UNSENT, pageable);
 
-        return unsentGiftCards.map(giftCard -> {
+        return unsentLogs.map(unsentLog -> {
+            GiftCard giftCard = unsentLog.getGiftCard();
             UnsentGiftCardDto dto = new UnsentGiftCardDto();
             
             dto.setCardCode(giftCard.getCardCode());
@@ -493,18 +495,10 @@ public class GiftCardServiceImpl implements GiftCardService {
                 dto.setPoolId(giftCard.getPoolId().toString());
             }
             
-            // Get the UNSENT log to find who unsent it and when
-            List<GiftCardDistributionLog> unsentLogs = distributionLogRepository.findByGiftCardIdOrderByCreatedAtDesc(giftCard.getId());
-            GiftCardDistributionLog unsentLog = unsentLogs.stream()
-                    .filter(log -> log.getAction() == DistributionAction.UNSENT)
-                    .findFirst()
-                    .orElse(null);
-            
-            if (unsentLog != null) {
-                dto.setUnsentBy(unsentLog.getPerformedBy());
-                dto.setUnsentAt(unsentLog.getCreatedAt());
-                dto.setDetails(unsentLog.getDetails());
-            }
+            // Use the unsent log we already have
+            dto.setUnsentBy(unsentLog.getPerformedBy());
+            dto.setUnsentAt(unsentLog.getCreatedAt());
+            dto.setDetails(unsentLog.getDetails());
             
             return dto;
         });

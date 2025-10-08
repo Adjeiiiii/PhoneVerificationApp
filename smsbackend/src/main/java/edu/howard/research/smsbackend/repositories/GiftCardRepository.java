@@ -71,7 +71,7 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, UUID> {
     @Query("SELECT DISTINCT p, si FROM Participant p " +
            "JOIN SurveyInvitation si ON si.participant = p " +
            "WHERE si.completedAt IS NOT NULL " +
-           "AND NOT EXISTS (SELECT 1 FROM GiftCard gc WHERE gc.participant = p AND gc.invitation = si) " +
+           "AND NOT EXISTS (SELECT 1 FROM GiftCard gc WHERE gc.participant = p AND gc.invitation = si AND gc.status != 'UNSENT') " +
            "ORDER BY si.completedAt DESC")
     List<Object[]> findEligibleParticipants();
 
