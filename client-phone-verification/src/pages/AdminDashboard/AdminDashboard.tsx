@@ -742,10 +742,10 @@ const AdminDashboard: React.FC = () => {
                                         handleResendEmail(r);
                                         setActiveActionMenu(null);
                                       }}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                      className="flex items-center w-full px-4 py-2 text-sm text-green-700 hover:bg-green-100"
                                       role="menuitem"
                                     >
-                                      <svg className="mr-3 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="mr-3 h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                       </svg>
                                       Resend
@@ -759,10 +759,16 @@ const AdminDashboard: React.FC = () => {
                                         }
                                         setActiveActionMenu(null);
                                       }}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100"
+                                      className={`flex items-center w-full px-4 py-2 text-sm text-left ${
+                                        r.completed_at 
+                                          ? 'text-yellow-700 hover:bg-yellow-100' 
+                                          : 'text-green-700 hover:bg-green-100'
+                                      }`}
                                       role="menuitem"
                                     >
-                                      <svg className={`mr-3 h-4 w-4 flex-shrink-0 text-gray-500`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className={`mr-3 h-4 w-4 flex-shrink-0 ${
+                                        r.completed_at ? 'text-yellow-500' : 'text-green-500'
+                                      }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         {r.completed_at ? (
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                                         ) : (

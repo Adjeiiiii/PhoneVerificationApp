@@ -155,7 +155,12 @@ const AdminDBOps: React.FC = () => {
     } else if (filter === 'unused') {
       filtered = filtered.filter((l) => !l.used);
     }
-    filtered.sort((a, b) => a.id.localeCompare(b.id));
+    // Sort with used links at the top, then by ID
+    filtered.sort((a, b) => {
+      if (a.used && !b.used) return -1; // a (used) comes before b (unused)
+      if (!a.used && b.used) return 1;  // b (used) comes before a (unused)
+      return a.id.localeCompare(b.id);  // If both have same usage status, sort by ID
+    });
     if (searchQuery.trim() !== '') {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
