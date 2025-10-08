@@ -2,11 +2,14 @@ package edu.howard.research.smsbackend.controllers;
 
 import edu.howard.research.smsbackend.models.dto.LinkUploadRequest;
 import edu.howard.research.smsbackend.models.dto.UploadResult;
+import edu.howard.research.smsbackend.models.entities.GiftCard;
 import edu.howard.research.smsbackend.models.entities.LinkStatus;
 import edu.howard.research.smsbackend.models.entities.Participant;
 import edu.howard.research.smsbackend.models.entities.ParticipantStatus;
 import edu.howard.research.smsbackend.models.entities.SurveyInvitation;
 import edu.howard.research.smsbackend.models.entities.SurveyLinkPool;
+import edu.howard.research.smsbackend.repositories.GiftCardDistributionLogRepository;
+import edu.howard.research.smsbackend.repositories.GiftCardRepository;
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
@@ -22,6 +25,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,6 +40,8 @@ public class AdminSurveyController {
     private final SurveyLinkPoolRepository linkRepo;
     private final SurveyInvitationRepository inviteRepo;
     private final ParticipantRepository participantRepo;
+    private final GiftCardRepository giftCardRepo;
+    private final GiftCardDistributionLogRepository distributionLogRepo;
     private final InvitationsService invitationsService;
     private final SmsService smsService;
     private final EmailService emailService;
@@ -579,6 +585,7 @@ public class AdminSurveyController {
 
     // ---------- Delete user/participant ----------
     @DeleteMapping("/delete-user/{id}")
+    @Transactional
     public ResponseEntity<?> deleteUser(
             @PathVariable UUID id,
             HttpServletRequest request
@@ -600,13 +607,22 @@ public class AdminSurveyController {
             Participant participant = invitation.getParticipant();
             SurveyLinkPool link = invitation.getLink();
 
+            // First, delete all gift cards associated with this invitation
+            List<GiftCard> giftCards = giftCardRepo.findByInvitationId(id);
+            for (GiftCard giftCard : giftCards) {
+                // Delete all distribution logs for this gift card first
+                distributionLogRepo.deleteByGiftCardId(giftCard.getId());
+                // Then delete the gift card
+                giftCardRepo.delete(giftCard);
+            }
+
             // Reset the link status to AVAILABLE before deleting
             if (link != null) {
                 link.setStatus(LinkStatus.AVAILABLE);
                 linkRepo.save(link);
             }
 
-            // Delete the invitation first (due to foreign key constraints)
+            // Delete the invitation (now safe since gift cards are deleted)
             inviteRepo.delete(invitation);
             
             // Then delete the participant

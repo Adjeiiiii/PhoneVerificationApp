@@ -23,6 +23,11 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, UUID> {
     Page<GiftCard> findByParticipantIdOrderByCreatedAtDesc(UUID participantId, Pageable pageable);
 
     /**
+     * Find gift cards by invitation ID
+     */
+    List<GiftCard> findByInvitationId(UUID invitationId);
+
+    /**
      * Find gift cards by status
      */
     Page<GiftCard> findByStatusOrderByCreatedAtDesc(GiftCardStatus status, Pageable pageable);
