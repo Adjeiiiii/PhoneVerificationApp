@@ -681,9 +681,14 @@ public class AdminSurveyController {
                 linkRepo.save(link);
             }
 
-            // Delete gift cards (distribution logs will be cascade deleted)
+            // Note: Gift cards are kept in UNSENT status for unsent history tracking
+            // They are not deleted so they appear in the unsent history
+            
+            // Clear foreign key references before deleting invitation and participant
             for (GiftCard giftCard : giftCards) {
-                giftCardRepo.delete(giftCard);
+                giftCard.setInvitation(null);
+                giftCard.setParticipant(null);
+                giftCardRepo.save(giftCard);
             }
 
             // Delete the invitation

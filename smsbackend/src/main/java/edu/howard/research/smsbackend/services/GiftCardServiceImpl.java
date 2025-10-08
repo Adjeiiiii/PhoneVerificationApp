@@ -476,23 +476,36 @@ public class GiftCardServiceImpl implements GiftCardService {
                 DistributionAction.UNSENT, pageable);
 
         return unsentLogs.map(unsentLog -> {
-            GiftCard giftCard = unsentLog.getGiftCard();
             UnsentGiftCardDto dto = new UnsentGiftCardDto();
             
-            dto.setCardCode(giftCard.getCardCode());
-            dto.setCardType(giftCard.getCardType().toString());
-            dto.setCardValue(giftCard.getCardValue());
-            dto.setStatus(giftCard.getStatus().toString());
-            dto.setParticipantPhone(giftCard.getParticipant().getPhone());
-            dto.setParticipantEmail(giftCard.getParticipant().getEmail());
-            dto.setParticipantName(giftCard.getParticipant().getName());
-            if (giftCard.getSentAt() != null) {
-                dto.setSentAt(giftCard.getSentAt().toString());
+            // Extract all data from distribution log details to avoid Hibernate issues
+            Map<String, Object> details = unsentLog.getDetails();
+            
+            dto.setCardCode((String) details.get("card_code"));
+            dto.setCardType((String) details.get("card_type"));
+            
+            // Handle BigDecimal conversion from Double
+            Object cardValueObj = details.get("card_value");
+            if (cardValueObj instanceof Double) {
+                dto.setCardValue(BigDecimal.valueOf((Double) cardValueObj));
+            } else if (cardValueObj instanceof BigDecimal) {
+                dto.setCardValue((BigDecimal) cardValueObj);
+            } else if (cardValueObj instanceof Number) {
+                dto.setCardValue(BigDecimal.valueOf(((Number) cardValueObj).doubleValue()));
             }
-            dto.setSentBy(giftCard.getSentBy());
-            dto.setSource(giftCard.getSource());
-            if (giftCard.getPoolId() != null) {
-                dto.setPoolId(giftCard.getPoolId().toString());
+            
+            dto.setStatus((String) details.get("previous_status")); // Use previous status from details
+            dto.setParticipantPhone((String) details.get("participant_phone"));
+            dto.setParticipantEmail((String) details.get("participant_email"));
+            dto.setParticipantName((String) details.get("participant_name"));
+            // Extract additional data from details
+            if (details.get("sent_at") != null) {
+                dto.setSentAt(details.get("sent_at").toString());
+            }
+            dto.setSentBy((String) details.get("sent_by"));
+            dto.setSource((String) details.get("source"));
+            if (details.get("pool_id") != null) {
+                dto.setPoolId(details.get("pool_id").toString());
             }
             
             // Use the unsent log we already have
