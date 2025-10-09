@@ -29,7 +29,7 @@ public class EmailService {
     public boolean sendSurveyLink(String toEmail, String participantName, String surveyLink) {
         try {
             Email from = new Email(fromEmail, fromName);
-            String subject = "Your Survey Link - Howard Research Study";
+            String subject = "HCAI (Howard University Research) Survey Link";
             
             String htmlContent = buildSurveyLinkEmail(participantName, surveyLink);
             Content content = new Content("text/html", htmlContent);
@@ -59,7 +59,7 @@ public class EmailService {
     public boolean sendVerificationCode(String toEmail, String participantName, String verificationCode) {
         try {
             Email from = new Email(fromEmail, fromName);
-            String subject = "Your Verification Code - Howard Research Study";
+            String subject = "HCAI (Howard University Research) Verification Code";
             
             String htmlContent = buildVerificationEmail(participantName, verificationCode);
             Content content = new Content("text/html", htmlContent);
@@ -120,11 +120,10 @@ public class EmailService {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Survey Link - Howard Research Study</title>
+                <title>HCAI (Howard University Research) Survey Link</title>
             </head>
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                    <h1 style="color: #2c3e50; margin-top: 0;">Howard University AI for Health Study</h1>
                 </div>
                 
                 <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px;">
@@ -150,9 +149,9 @@ public class EmailService {
                     <p>Thank you for your participation!</p>
                     
                     <p style="margin-top: 30px;">
-                        <strong>The Howard Research Team</strong><br>
+                        <strong>The HCAI Research Team</strong><br>
                         Howard University<br>
-                        AI for Health Study
+                        HCAI (Howard University Research)
                     </p>
                 </div>
                 
@@ -171,11 +170,10 @@ public class EmailService {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Verification Code - Howard Research Study</title>
+                <title>HCAI (Howard University Research) Verification Code</title>
             </head>
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                    <h1 style="color: #2c3e50; margin-top: 0;">Howard University AI for Health Study</h1>
                 </div>
                 
                 <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px;">
@@ -194,9 +192,9 @@ public class EmailService {
                     <p>If you didn't request this verification code, please ignore this email.</p>
                     
                     <p style="margin-top: 30px;">
-                        <strong>The Howard Research Team</strong><br>
+                        <strong>The HCAI Research Team</strong><br>
                         Howard University<br>
-                        AI for Health Study
+                        HCAI (Howard University Research)
                     </p>
                 </div>
                 
