@@ -91,21 +91,15 @@ const GiftCardManagement: React.FC = () => {
   // Pool status and cards
   const [poolStatus, setPoolStatus] = useState<GiftCardPoolStatus | null>(null);
   const [poolCards, setPoolCards] = useState<GiftCardPool[]>([]);
-  const [poolPage, setPoolPage] = useState(0);
-  const [poolTotalPages, setPoolTotalPages] = useState(0);
   
   // Eligible participants
   const [eligibleParticipants, setEligibleParticipants] = useState<EligibleParticipant[]>([]);
   
   // Sent gift cards
   const [sentGiftCards, setSentGiftCards] = useState<GiftCard[]>([]);
-  const [sentPage, setSentPage] = useState(0);
-  const [sentTotalPages, setSentTotalPages] = useState(0);
   
   // Unsent gift cards
   const [unsentGiftCards, setUnsentGiftCards] = useState<UnsentGiftCard[]>([]);
-  const [unsentPage, setUnsentPage] = useState(0);
-  const [unsentTotalPages, setUnsentTotalPages] = useState(0);
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -235,9 +229,8 @@ const GiftCardManagement: React.FC = () => {
 
   const fetchPoolData = async () => {
     try {
-      const response = await api.getAvailableGiftCards(poolPage, 20);
+      const response = await api.getAvailableGiftCards(0, 20);
       setPoolCards(response.content || []);
-      setPoolTotalPages(response.totalPages || 0);
     } catch (error) {
       console.error('Error fetching pool cards:', error);
     }
@@ -254,9 +247,8 @@ const GiftCardManagement: React.FC = () => {
 
   const fetchSentGiftCards = async () => {
     try {
-      const response = await api.getSentGiftCards(sentPage, 20);
+      const response = await api.getSentGiftCards(0, 20);
       setSentGiftCards(response.content || []);
-      setSentTotalPages(response.totalPages || 0);
     } catch (error) {
       console.error('Error fetching sent gift cards:', error);
     }
@@ -264,9 +256,8 @@ const GiftCardManagement: React.FC = () => {
 
   const fetchUnsentGiftCards = async () => {
     try {
-      const response = await api.getUnsentGiftCards(unsentPage, 20);
+      const response = await api.getUnsentGiftCards(0, 20);
       setUnsentGiftCards(response.content || []);
-      setUnsentTotalPages(response.totalPages || 0);
     } catch (error) {
       console.error('Error fetching unsent gift cards:', error);
     }

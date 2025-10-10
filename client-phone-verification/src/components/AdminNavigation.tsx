@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 interface AdminNavigationProps {
   currentPage: 'dashboard' | 'database' | 'gift-cards';
@@ -7,7 +7,6 @@ interface AdminNavigationProps {
 
 const AdminNavigation: React.FC<AdminNavigationProps> = ({ currentPage }) => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const getButtonClass = (page: string) => {
     const isActive = currentPage === page;

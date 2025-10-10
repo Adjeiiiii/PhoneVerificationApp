@@ -288,7 +288,7 @@ export const api = {
   },
 
   resendGiftCard: async (giftCardId: string) => {
-    return api.post(`/api/admin/gift-cards/${giftCardId}/resend`);
+    return api.post(`/api/admin/gift-cards/${giftCardId}/resend`, {});
   },
 
   addGiftCardNotes: async (giftCardId: string, notes: string) => {
@@ -300,7 +300,7 @@ export const api = {
   },
 
   unsendGiftCard: async (giftCardId: string) => {
-    return api.post(`/api/admin/gift-cards/${giftCardId}/unsend`);
+    return api.post(`/api/admin/gift-cards/${giftCardId}/unsend`, {});
   },
 
   getUnsentGiftCards: async (page = 0, size = 20) => {
@@ -313,11 +313,11 @@ export const api = {
 
   // Survey management API calls
   markSurveyCompleted: async (invitationId: string) => {
-    return api.post(`/api/admin/invitations/${invitationId}/complete`);
+    return api.post(`/api/admin/invitations/${invitationId}/complete`, {});
   },
 
   markSurveyUncompleted: async (invitationId: string) => {
-    return api.post(`/api/admin/invitations/${invitationId}/uncomplete`);
+    return api.post(`/api/admin/invitations/${invitationId}/uncomplete`, {});
   },
 
   bulkMarkSurveysCompleted: async (invitationIds: string[]) => {
