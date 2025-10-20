@@ -54,8 +54,8 @@ sendgrid:
   fromName: ${SENDGRID_FROM_NAME:Howard Research Team}
 
 admin:
-  username: ${ADMIN_USERNAME:howardresearchadmin}
-  password: ${ADMIN_PASSWORD:HowardResearch2025}
+  username: ${ADMIN_USERNAME}
+  password: ${ADMIN_PASSWORD}
   jwt:
-    secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890}
+    secret: ${JWT_SECRET}
     expiration: ${JWT_EXPIRATION:3600000}  # 1 hour in milliseconds
