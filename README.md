@@ -2,10 +2,16 @@
 
 A full-stack application for phone number verification and survey link distribution, built for Howard University's AI for Health research study.
 
+## 📚 Documentation
+
+- **[Frontend Design Document](design-docs/frontend-design.md)** - Complete React architecture, components, and workflows
+- **[Backend Design Document](design-docs/backend-design.md)** - Comprehensive Spring Boot API, services, and security
+- **[Environment Setup Guide](backend/ENVIRONMENT_SETUP.md)** - Detailed configuration instructions
+
 ## 🏗️ Architecture
 
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS
-- **Backend**: Spring Boot + Java 17
+- **Backend**: Spring Boot + Java 21
 - **Database**: PostgreSQL
 - **SMS Service**: Twilio
 - **Email Service**: SendGrid
@@ -18,7 +24,7 @@ A full-stack application for phone number verification and survey link distribut
 - [Git](https://git-scm.com/)
 - [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
 - [Node.js](https://nodejs.org/) (v18 or higher)
-- [Java 17](https://openjdk.org/projects/jdk/17/) (for local development)
+- [Java 21](https://openjdk.org/projects/jdk/21/) (for local development)
 
 ### 1. Clone the Repository
 
@@ -33,51 +39,30 @@ cd PhoneVerificationApp
 
 1. Navigate to the backend directory:
    ```bash
-   cd smsbackend
+   cd backend
    ```
 
-2. Create environment file:
+2. Create environment file from template:
    ```bash
-   cp docker-compose.example.yml docker-compose.yml
+   cp .env.example .env
    ```
 
-3. Create `.env` file with your credentials:
+3. Generate secure credentials:
    ```bash
-   cat > .env << 'EOF'
-   # Database Configuration
-   POSTGRES_DB=hu_research
-   POSTGRES_USER=hu_app
-   POSTGRES_PASSWORD=your_database_password
-   DB_HOST=db
-   DB_PORT=5432
-   DB_NAME=hu_research
-   DB_USER=hu_app
-   DB_PASSWORD=your_database_password
-   DB_SSL_MODE=disable
-   DB_POOL_MAX=10
+   ./generate-credentials.sh
+   ```
 
-   # Twilio Configuration
-   TWILIO_ACCOUNT_SID=your_twilio_account_sid
-   TWILIO_AUTH_TOKEN=your_twilio_auth_token
-   VERIFY_SERVICE_SID=your_verify_service_sid
-   MESSAGING_SERVICE_SID=your_messaging_service_sid
-
-   # SendGrid Configuration
-   SENDGRID_API_KEY=your_sendgrid_api_key
-   SENDGRID_FROM_EMAIL=your_email@domain.com
-   SENDGRID_FROM_NAME=Your Team Name
-
-   # App Configuration
-   SERVER_PORT=8080
-   FLYWAY_ENABLED=true
-   EOF
+4. Update `.env` file with generated credentials and your service API keys:
+   ```bash
+   # Copy the generated values from generate-credentials.sh
+   # Add your Twilio, SendGrid, and database credentials
    ```
 
 #### Frontend Configuration
 
 1. Navigate to the frontend directory:
    ```bash
-   cd ../client-phone-verification
+   cd ../frontend
    ```
 
 2. Install dependencies:
@@ -93,11 +78,11 @@ From the project root directory:
 
 ```bash
 # Start backend services (database + API)
-cd smsbackend
+cd backend
 docker-compose up --build
 
 # In a new terminal, start frontend
-cd client-phone-verification
+cd ../frontend
 npm run dev
 ```
 
@@ -105,14 +90,14 @@ npm run dev
 
 1. **Start Backend:**
    ```bash
-   cd smsbackend
+   cd backend
    docker-compose up db  # Start only database
    ./mvnw spring-boot:run  # Start Spring Boot app
    ```
 
 2. **Start Frontend:**
    ```bash
-   cd client-phone-verification
+   cd ../frontend
    npm run dev
    ```
 
@@ -126,26 +111,30 @@ npm run dev
 
 ```
 PhoneVerificationApp/
-├── client-phone-verification/     # React frontend
+├── frontend/                        # React frontend
 │   ├── src/
-│   │   ├── pages/                 # React components
-│   │   ├── contexts/              # React context providers
-│   │   ├── utils/                 # API utilities
-│   │   └── routes/                # Route components
+│   │   ├── pages/                   # React components
+│   │   ├── contexts/                # React context providers
+│   │   ├── utils/                   # API utilities
+│   │   └── routes/                  # Route components
 │   ├── package.json
 │   └── vite.config.ts
-├── smsbackend/                    # Spring Boot backend
+├── backend/                         # Spring Boot backend
 │   ├── src/main/java/edu/howard/research/smsbackend/
-│   │   ├── controllers/           # REST controllers
-│   │   ├── services/              # Business logic
-│   │   ├── models/                # Data models
-│   │   └── repositories/          # Data access layer
+│   │   ├── controllers/             # REST controllers
+│   │   ├── services/                # Business logic
+│   │   ├── models/                  # Data models
+│   │   └── repositories/            # Data access layer
 │   ├── src/main/resources/
-│   │   ├── application.yml        # Application configuration
-│   │   └── db/migration/          # Database migrations
-│   ├── docker-compose.yml         # Docker configuration
-│   ├── docker-compose.example.yml # Environment template
-│   └── .env                       # Environment variables (create this)
+│   │   ├── application.yml          # Application configuration
+│   │   └── db/migration/            # Database migrations
+│   ├── docker-compose.yml           # Docker configuration
+│   ├── .env.example                 # Environment template
+│   ├── generate-credentials.sh       # Secure credential generation
+│   └── .env                         # Environment variables (create this)
+├── design-docs/                     # Comprehensive documentation
+│   ├── frontend-design.md           # Frontend architecture
+│   └── backend-design.md           # Backend architecture
 └── README.md
 ```
 
@@ -153,7 +142,9 @@ PhoneVerificationApp/
 
 ### Environment Variables
 
-The application requires several environment variables. See `smsbackend/ENVIRONMENT_SETUP.md` for detailed configuration instructions.
+The application requires several environment variables. See `backend/ENVIRONMENT_SETUP.md` for detailed configuration instructions.
+
+⚠️ **Security Notice**: The application uses environment-based credential management with no hardcoded defaults. You must set secure credentials or the application will not start.
 
 ### Database
 
@@ -171,14 +162,20 @@ The application uses PostgreSQL with Flyway for database migrations. The databas
 
 1. Create production environment file:
    ```bash
-   cp smsbackend/docker-compose.example.yml smsbackend/docker-compose.yml
+   cp backend/.env.example backend/.env
    ```
 
-2. Update environment variables with production values
-
-3. Deploy using Docker Compose:
+2. Generate secure credentials:
    ```bash
-   cd smsbackend
+   cd backend
+   ./generate-credentials.sh
+   ```
+
+3. Update environment variables with production values
+
+4. Deploy using Docker Compose:
+   ```bash
+   cd backend
    docker-compose up -d
    ```
 
@@ -212,14 +209,14 @@ The application uses PostgreSQL with Flyway for database migrations. The databas
 ### Backend Development
 
 ```bash
-cd smsbackend
+cd backend
 ./mvnw spring-boot:run
 ```
 
 ### Frontend Development
 
 ```bash
-cd client-phone-verification
+cd frontend
 npm run dev
 ```
 
@@ -232,10 +229,13 @@ Migrations are automatically applied on startup. To create new migrations:
 
 ## 🔒 Security
 
-- All sensitive credentials are stored in environment variables
-- JWT tokens for admin authentication
-- CORS configured for frontend-backend communication
-- Database credentials are not committed to version control
+- **Environment-based credentials**: All sensitive data stored in environment variables
+- **No hardcoded defaults**: Application won't start without proper configuration
+- **Secure credential generation**: Use `generate-credentials.sh` for random credentials
+- **JWT tokens**: For admin authentication with configurable expiration
+- **CORS configured**: For frontend-backend communication
+- **Database credentials**: Not committed to version control
+- **Credential rotation**: Easy to rotate credentials by updating environment variables
 
 ## 📝 Contributing
 
