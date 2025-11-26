@@ -233,6 +233,12 @@ export const api = {
     return api.get(`/api/participants/check-verification/${encodeURIComponent(normalizedPhone)}`);
   },
 
+  // Validate phone number type (check for VOIP)
+  validatePhone: async (phone: string) => {
+    const normalizedPhone = normalizePhoneNumber(phone);
+    return api.post('/api/participants/validate-phone', { phone: normalizedPhone });
+  },
+
   // Gift Card API calls
   getGiftCardPoolStatus: async () => {
     return api.get('/api/admin/gift-cards/pool/status');

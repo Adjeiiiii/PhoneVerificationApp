@@ -5,6 +5,7 @@ import edu.howard.research.smsbackend.models.entities.Participant;
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.services.EmailService;
+import edu.howard.research.smsbackend.services.PhoneValidationService;
 import edu.howard.research.smsbackend.services.SmsService;
 import edu.howard.research.smsbackend.services.SurveyService;
 import edu.howard.research.smsbackend.util.PhoneNumberService;
@@ -29,6 +30,46 @@ public class ParticipantsController {
     private final SurveyInvitationRepository invitationRepository;
     private final SmsService smsService;
     private final EmailService emailService;
+    private final PhoneValidationService phoneValidationService;
+
+    /**
+     * Validate phone number type (check if VOIP)
+     * Returns validation result indicating if phone is acceptable (mobile/landline)
+     */
+    @PostMapping("/validate-phone")
+    public ResponseEntity<Map<String, Object>> validatePhone(@RequestBody Map<String, String> request) {
+        try {
+            String phone = request.get("phone");
+            if (phone == null || phone.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "valid", false,
+                    "error", "Phone number is required"
+                ));
+            }
+            
+            String normalizedPhone = phoneNumberService.normalizeToE164(phone);
+            PhoneValidationService.ValidationResult validation = 
+                    phoneValidationService.validatePhoneNumber(normalizedPhone);
+            
+            if (validation.isValid()) {
+                return ResponseEntity.ok(Map.of(
+                    "valid", true,
+                    "message", "Phone number is acceptable"
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                    "valid", false,
+                    "error", validation.getErrorMessage()
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Error validating phone number: {}", e.getMessage(), e);
+            return ResponseEntity.ok(Map.of(
+                "valid", false,
+                "error", "Error validating phone number: " + e.getMessage()
+            ));
+        }
+    }
 
     /**
      * Check if a participant is already verified

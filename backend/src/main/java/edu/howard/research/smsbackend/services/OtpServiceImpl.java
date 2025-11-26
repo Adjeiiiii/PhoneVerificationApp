@@ -23,17 +23,32 @@ public class OtpServiceImpl implements OtpService {
 
     private final String verifyServiceSid;
     private final ParticipantRepository participantRepo;
+    private final PhoneValidationService phoneValidationService;
 
     public OtpServiceImpl(
             @Value("${twilio.verifyServiceSid}") String verifyServiceSid,
-            ParticipantRepository participantRepo
+            ParticipantRepository participantRepo,
+            PhoneValidationService phoneValidationService
     ) {
         this.verifyServiceSid = verifyServiceSid;
         this.participantRepo = participantRepo;
+        this.phoneValidationService = phoneValidationService;
     }
 
     @Override
     public Map<String, Object> start(OtpStartRequest req) {
+        // Validate phone number is not VOIP before starting verification
+        PhoneValidationService.ValidationResult validation = 
+                phoneValidationService.validatePhoneNumber(req.getPhone());
+        
+        if (!validation.isValid()) {
+            log.warn("Rejected OTP start for VOIP number: {}", req.getPhone());
+            return Map.of(
+                    "ok", false, 
+                    "error", validation.getErrorMessage()
+            );
+        }
+
         try {
             Verification v = Verification
                     .creator(verifyServiceSid, req.getPhone(), req.getChannel())
