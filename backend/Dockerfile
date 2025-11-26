@@ -15,13 +15,17 @@ RUN ./mvnw -q -DskipTests package
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-# Optional: curl for container healthcheck
+# Install curl for healthcheck and openssl for credential generation
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl openssl \
  && rm -rf /var/lib/apt/lists/*
 
 # Copy the built jar (adjust pattern if you use a fixed <finalName>)
 COPY --from=build /app/target/*-SNAPSHOT.jar app.jar
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Run as non-root
 RUN addgroup --system app && adduser --system --ingroup app app
@@ -36,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=3s --retries=5 \
 # Allow passing JVM flags and Spring profile via env
 ENV JAVA_OPTS=""
 ENV SPRING_PROFILES_ACTIVE=""
-ENTRYPOINT ["sh","-c","exec java $JAVA_OPTS ${SPRING_PROFILES_ACTIVE:+-Dspring.profiles.active=$SPRING_PROFILES_ACTIVE} -jar app.jar"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

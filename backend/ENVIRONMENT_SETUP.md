@@ -41,6 +41,14 @@ SENDGRID_FROM_NAME=Your Team Name
 # App Configuration
 SERVER_PORT=8080
 FLYWAY_ENABLED=true
+
+# Admin Configuration
+# Note: JWT_SECRET and ADMIN_PASSWORD will be auto-generated if not set
+# You can optionally set them manually for consistency across restarts
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your_secure_password_here  # Optional: auto-generated if not set
+JWT_SECRET=your_jwt_secret_key_here_min_64_characters  # Optional: auto-generated if not set
+JWT_EXPIRATION=3600000
 ```
 
 ## 3. Run the Application

@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Date;
 
 @Component
@@ -18,7 +20,26 @@ public class JwtUtil {
 
     public JwtUtil(@Value("${admin.jwt.secret}") String secret,
                    @Value("${admin.jwt.expiration}") long expirationTime) {
-        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes());
+        // HS512 requires at least 512 bits (64 bytes) key length
+        // If secret is shorter, we'll hash it to ensure proper length
+        byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (secretBytes.length < 64) {
+            try {
+                // Use SHA-512 to hash the secret to get exactly 64 bytes
+                MessageDigest digest = MessageDigest.getInstance("SHA-512");
+                secretBytes = digest.digest(secretBytes);
+            } catch (Exception e) {
+                log.error("Error hashing JWT secret", e);
+                // Fallback: pad with repetition if hashing fails
+                byte[] padded = new byte[64];
+                System.arraycopy(secretBytes, 0, padded, 0, Math.min(secretBytes.length, 64));
+                for (int i = secretBytes.length; i < 64; i++) {
+                    padded[i] = secretBytes[i % secretBytes.length];
+                }
+                secretBytes = padded;
+            }
+        }
+        this.secretKey = Keys.hmacShaKeyFor(secretBytes);
         this.expirationTime = expirationTime;
     }
 
