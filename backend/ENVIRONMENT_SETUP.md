@@ -38,6 +38,16 @@ SENDGRID_API_KEY=your_sendgrid_api_key
 SENDGRID_FROM_EMAIL=your_email@domain.com
 SENDGRID_FROM_NAME=Your Team Name
 
+# Bit.ly Configuration (Optional - for URL shortening)
+# Get your API token from: https://bitly.com/a/settings/api
+# 1. Log in to your Bit.ly account
+# 2. Go to Settings > Developer settings > API
+# 3. Enter your password and click "Generate token"
+# 4. Copy the token and paste it below
+# Note: If not provided, links will be sent as-is (long URLs)
+# Free tier: 1,000 shortens/month
+BITLY_API_TOKEN=your_bitly_api_token_here
+
 # App Configuration
 SERVER_PORT=8080
 FLYWAY_ENABLED=true

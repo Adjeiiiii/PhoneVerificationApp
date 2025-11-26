@@ -9,6 +9,7 @@ import { api } from '../../utils/api';
 interface LinkRecord {
   id: string; // Changed from number to string for UUIDs
   link: string;
+  shortLink: string | null;
   used: boolean;
   assigned_phone: string | null;
   assigned_email: string | null;
@@ -107,6 +108,7 @@ const AdminDBOps: React.FC = () => {
             return {
               id: link.id,
               link: link.linkUrl, // Map linkUrl to link
+              shortLink: link.shortLinkUrl || null, // Map shortLinkUrl
               used: !!participant, // Only truly assigned links are used
               assigned_phone: participant?.phone || null,
               assigned_email: participant?.email || null
@@ -166,6 +168,7 @@ const AdminDBOps: React.FC = () => {
       filtered = filtered.filter(
         (l) =>
           l.link.toLowerCase().includes(q) ||
+          (l.shortLink && l.shortLink.toLowerCase().includes(q)) ||
           (l.assigned_phone && l.assigned_phone.toLowerCase().includes(q)) ||
           (l.assigned_email && l.assigned_email.toLowerCase().includes(q))
       );
@@ -548,7 +551,8 @@ const AdminDBOps: React.FC = () => {
                       onChange={toggleSelectAll}
                     />
                   </th>
-                  <th className="p-2">Link</th>
+                  <th className="p-2">Short Link</th>
+                  <th className="p-2">Long Link</th>
                   <th className="p-2 w-16">Used?</th>
                   <th className="p-2 w-32">Assigned Phone</th>
                   <th className="p-2 w-32">Assigned Email</th>
@@ -566,7 +570,48 @@ const AdminDBOps: React.FC = () => {
                         disabled={ln.used}
                       />
                     </td>
-                    <td className="p-2 break-words">{ln.link}</td>
+                    <td className="p-2 break-words">
+                      {ln.shortLink ? (
+                        <div>
+                          <a 
+                            href={ln.shortLink} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline font-medium"
+                          >
+                            {ln.shortLink}
+                          </a>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(ln.shortLink!);
+                              setActionMessage('Short link copied to clipboard!');
+                              setTimeout(() => setActionMessage(''), 3000);
+                            }}
+                            className="ml-2 text-gray-500 hover:text-gray-700"
+                            title="Copy short link"
+                          >
+                            <i className="fas fa-copy"></i>
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic">Not shortened</span>
+                      )}
+                    </td>
+                    <td className="p-2 break-words">
+                      <div className="group relative">
+                        <a 
+                          href={ln.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          {ln.link.length > 50 ? `${ln.link.substring(0, 50)}...` : ln.link}
+                        </a>
+                        <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap max-w-md break-all">
+                          {ln.link}
+                        </div>
+                      </div>
+                    </td>
                     <td className="p-2">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                         ln.used ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'

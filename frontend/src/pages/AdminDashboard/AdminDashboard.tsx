@@ -18,6 +18,7 @@ interface VerificationRecord {
   phone_number: string;
   email: string;
   assigned_link: string | null;
+  short_link: string | null;
   status: string; // "passed", "failed", or ""
   sms_sent_at: string | null; // SMS timestamp
   email_status: string; // Email status (placeholder for future)
@@ -135,6 +136,7 @@ const AdminDashboard: React.FC = () => {
             phone_number: invitation.participant?.phone || '',
             email: invitation.participant?.email || '', // Use actual participant email
             assigned_link: invitation.linkUrl || '',
+            short_link: invitation.shortLinkUrl || null, // Short link URL
             status: invitation.messageStatus || 'pending', // SMS status
             sms_sent_at: invitation.sentAt || invitation.queuedAt || '',
             // Email fields - show actual data
@@ -171,6 +173,7 @@ const AdminDashboard: React.FC = () => {
       r.phone_number.toLowerCase().includes(q) ||
       (r.email && r.email.toLowerCase().includes(q)) ||
       (r.assigned_link && r.assigned_link.toLowerCase().includes(q)) ||
+      (r.short_link && r.short_link.toLowerCase().includes(q)) ||
       (r.status && r.status.toLowerCase().includes(q));
 
     return matchesSearch;
@@ -696,7 +699,35 @@ const AdminDashboard: React.FC = () => {
                             )}
                           </td>
                           <td className="p-2 break-words">
-                            {r.assigned_link ? (
+                            {r.short_link ? (
+                              <div>
+                                <div className="mb-1">
+                                  <a 
+                                    href={r.short_link} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 underline font-medium"
+                                  >
+                                    {r.short_link}
+                                  </a>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(r.short_link!);
+                                      // You could add a toast notification here
+                                    }}
+                                    className="ml-2 text-gray-500 hover:text-gray-700"
+                                    title="Copy short link"
+                                  >
+                                    <i className="fas fa-copy text-xs"></i>
+                                  </button>
+                                </div>
+                                {r.assigned_link && (
+                                  <div className="text-xs text-gray-500 truncate max-w-xs" title={r.assigned_link}>
+                                    Long: {r.assigned_link.length > 40 ? `${r.assigned_link.substring(0, 40)}...` : r.assigned_link}
+                                  </div>
+                                )}
+                              </div>
+                            ) : r.assigned_link ? (
                               <a 
                                 href={r.assigned_link} 
                                 target="_blank" 

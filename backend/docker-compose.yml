@@ -52,6 +52,9 @@ services:
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
       SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME}
 
+      # ---- Bit.ly Configuration ----
+      BITLY_API_TOKEN: ${BITLY_API_TOKEN:-}
+
       # ---- Admin Configuration ----
       # Note: JWT_SECRET and ADMIN_PASSWORD will be auto-generated if not provided
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}

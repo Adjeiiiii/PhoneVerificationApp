@@ -63,6 +63,7 @@ public class InvitationsService {
         inv.setCreatedAt(OffsetDateTime.now());
         inv.setMessageStatus("pending");
         inv.setLinkUrl(claim.getLinkUrl());  // denormalized URL for easy sending
+        inv.setShortLinkUrl(claim.getShortLinkUrl());  // denormalized short URL
 
         inv = inviteRepo.save(inv);
 

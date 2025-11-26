@@ -32,6 +32,9 @@ public class SurveyLinkPool {
     @Column(name = "link_url", nullable = false)
     private String linkUrl;
 
+    @Column(name = "short_link_url")
+    private String shortLinkUrl;
+
     @Column(name = "notes")
     private String notes;
 
@@ -64,6 +67,9 @@ public class SurveyLinkPool {
 
     public String getLinkUrl() { return linkUrl; }
     public void setLinkUrl(String linkUrl) { this.linkUrl = linkUrl; }
+
+    public String getShortLinkUrl() { return shortLinkUrl; }
+    public void setShortLinkUrl(String shortLinkUrl) { this.shortLinkUrl = shortLinkUrl; }
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }

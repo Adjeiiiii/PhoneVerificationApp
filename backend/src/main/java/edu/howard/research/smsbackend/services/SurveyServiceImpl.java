@@ -70,6 +70,7 @@ public class SurveyServiceImpl implements SurveyService {
             }
             UUID linkId = claim.get().getLinkId();
             String linkUrl = claim.get().getLinkUrl();
+            String shortLinkUrl = claim.get().getShortLinkUrl();
 
             SurveyLinkPool linkRef = new SurveyLinkPool();
             linkRef.setId(linkId);
@@ -79,16 +80,18 @@ public class SurveyServiceImpl implements SurveyService {
             inv.setParticipant(p);
             inv.setLink(linkRef);
             inv.setLinkUrl(linkUrl);
+            inv.setShortLinkUrl(shortLinkUrl);
             inv = invitationRepository.save(inv);
 
-            // 4) send SMS
-            String body = "Here's the Howard University AI for Health survey link: " + linkUrl + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
+            // 4) send SMS - use short link if available, otherwise use long link
+            String linkToSend = (shortLinkUrl != null && !shortLinkUrl.isBlank()) ? shortLinkUrl : linkUrl;
+            String body = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
             Map<String, Object> send = smsService.send(e164, body);
 
-            // 5) send email if participant has email address
+            // 5) send email if participant has email address - use short link if available
             boolean emailSent = false;
             if (p.getEmail() != null && !p.getEmail().trim().isEmpty()) {
-                emailSent = emailService.sendSurveyLink(p.getEmail(), p.getName(), linkUrl);
+                emailSent = emailService.sendSurveyLink(p.getEmail(), p.getName(), linkToSend);
                 log.info("Email sent to {} for participant {}: {}", p.getEmail(), e164, emailSent ? "SUCCESS" : "FAILED");
             }
 

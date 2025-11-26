@@ -26,6 +26,9 @@ public class SurveyInvitation {
     @Column(name = "link_url", nullable = false)
     private String linkUrl;
 
+    @Column(name = "short_link_url")
+    private String shortLinkUrl;
+
     @Column(name = "message_sid")
     private String messageSid;
 
@@ -69,6 +72,9 @@ public class SurveyInvitation {
 
     public String getLinkUrl() { return linkUrl; }
     public void setLinkUrl(String linkUrl) { this.linkUrl = linkUrl; }
+
+    public String getShortLinkUrl() { return shortLinkUrl; }
+    public void setShortLinkUrl(String shortLinkUrl) { this.shortLinkUrl = shortLinkUrl; }
 
     public String getMessageSid() { return messageSid; }
     public void setMessageSid(String messageSid) { this.messageSid = messageSid; }

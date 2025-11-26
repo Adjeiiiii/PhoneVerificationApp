@@ -14,6 +14,7 @@ import edu.howard.research.smsbackend.repositories.GiftCardRepository;
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
+import edu.howard.research.smsbackend.services.BitlyService;
 import edu.howard.research.smsbackend.services.EmailService;
 import edu.howard.research.smsbackend.services.GiftCardService;
 import edu.howard.research.smsbackend.services.InvitationsService;
@@ -49,6 +50,7 @@ public class AdminSurveyController {
     private final SmsService smsService;
     private final EmailService emailService;
     private final PhoneNumberService phoneNumberService;
+    private final BitlyService bitlyService;
 
     // ---------- Helper method to validate JWT token ----------
     private boolean isValidAdminToken(HttpServletRequest request) {
@@ -81,6 +83,17 @@ public class AdminSurveyController {
             row.setNotes(req.getNotes());
             row.setUploadedBy(req.getUploadedBy());
             row.setStatus(LinkStatus.AVAILABLE);
+
+            // Automatically shorten the URL using Bit.ly
+            try {
+                String shortUrl = bitlyService.shortenUrl(url);
+                if (shortUrl != null && !shortUrl.isBlank()) {
+                    row.setShortLinkUrl(shortUrl);
+                }
+            } catch (Exception e) {
+                // Log error but continue - don't block link upload if shortening fails
+                // The link will still be saved with just the long URL
+            }
 
             try {
                 linkRepo.save(row);
@@ -257,7 +270,23 @@ public class AdminSurveyController {
             if (updates.containsKey("link")) {
                 String newLink = (String) updates.get("link");
                 if (newLink != null && !newLink.trim().isEmpty()) {
-                    link.setLinkUrl(newLink.trim());
+                    String trimmedLink = newLink.trim();
+                    link.setLinkUrl(trimmedLink);
+                    
+                    // Re-shorten the URL if it changed
+                    try {
+                        String shortUrl = bitlyService.shortenUrl(trimmedLink);
+                        if (shortUrl != null && !shortUrl.isBlank()) {
+                            link.setShortLinkUrl(shortUrl);
+                        } else {
+                            // If shortening fails, clear the short link
+                            link.setShortLinkUrl(null);
+                        }
+                    } catch (Exception e) {
+                        // Log error but continue - don't block update if shortening fails
+                        link.setShortLinkUrl(null);
+                    }
+                    
                     updated = true;
                 }
             }
@@ -360,8 +389,11 @@ public class AdminSurveyController {
         // 1) Idempotent allocation
         SurveyInvitation inv = invitationsService.getOrAssignByPhoneWithRetry(phone, batch);
 
-        // 2) Send SMS
-        String smsBody = "Here's the Howard University AI for Health survey link: " + inv.getLinkUrl() + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
+        // 2) Send SMS - use short link if available, otherwise use long link
+        String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 
+                ? inv.getShortLinkUrl() 
+                : inv.getLinkUrl();
+        String smsBody = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
         Map<String, Object> send = smsService.send(phone, smsBody);
 
         // 3) Persist queued state if accepted by Twilio

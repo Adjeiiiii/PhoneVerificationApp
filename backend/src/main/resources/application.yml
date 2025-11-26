@@ -53,6 +53,9 @@ sendgrid:
   fromEmail: ${SENDGRID_FROM_EMAIL:howardresearch@example.com}
   fromName: ${SENDGRID_FROM_NAME:Howard Research Team}
 
+bitly:
+  apiToken: ${BITLY_API_TOKEN:}
+
 admin:
   username: ${ADMIN_USERNAME}
   password: ${ADMIN_PASSWORD}

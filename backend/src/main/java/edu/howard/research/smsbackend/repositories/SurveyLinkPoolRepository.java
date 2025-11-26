@@ -22,12 +22,13 @@ public interface SurveyLinkPoolRepository extends JpaRepository<SurveyLinkPool, 
     interface ClaimResult {
         UUID getLinkId();
         String getLinkUrl();
+        String getShortLinkUrl();
     }
 
-    @Query(value = "SELECT link_id AS linkId, link_url AS linkUrl FROM claim_available_link(:batchLabel)", nativeQuery = true)
+    @Query(value = "SELECT link_id AS linkId, link_url AS linkUrl, short_link_url AS shortLinkUrl FROM claim_available_link(:batchLabel)", nativeQuery = true)
     Optional<ClaimResult> claimAvailable(@Param("batchLabel") String batchLabel);
 
-    @Query(value = "SELECT link_id AS linkId, link_url AS linkUrl FROM claim_available_link(NULL)", nativeQuery = true)
+    @Query(value = "SELECT link_id AS linkId, link_url AS linkUrl, short_link_url AS shortLinkUrl FROM claim_available_link(NULL)", nativeQuery = true)
     Optional<ClaimResult> claimAny();
 
     // ---- Status updates ----
