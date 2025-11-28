@@ -35,6 +35,9 @@ public class SurveyLinkPool {
     @Column(name = "short_link_url")
     private String shortLinkUrl;
 
+    @Column(name = "short_code", length = 10)
+    private String shortCode;
+
     @Column(name = "notes")
     private String notes;
 
@@ -70,6 +73,9 @@ public class SurveyLinkPool {
 
     public String getShortLinkUrl() { return shortLinkUrl; }
     public void setShortLinkUrl(String shortLinkUrl) { this.shortLinkUrl = shortLinkUrl; }
+
+    public String getShortCode() { return shortCode; }
+    public void setShortCode(String shortCode) { this.shortCode = shortCode; }
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }

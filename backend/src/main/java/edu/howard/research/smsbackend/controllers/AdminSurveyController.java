@@ -14,7 +14,7 @@ import edu.howard.research.smsbackend.repositories.GiftCardRepository;
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
-import edu.howard.research.smsbackend.services.BitlyService;
+import edu.howard.research.smsbackend.services.ShortLinkService;
 import edu.howard.research.smsbackend.services.EmailService;
 import edu.howard.research.smsbackend.services.GiftCardService;
 import edu.howard.research.smsbackend.services.InvitationsService;
@@ -24,6 +24,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
+@Slf4j
 public class AdminSurveyController {
 
     private final SurveyLinkPoolRepository linkRepo;
@@ -50,7 +52,7 @@ public class AdminSurveyController {
     private final SmsService smsService;
     private final EmailService emailService;
     private final PhoneNumberService phoneNumberService;
-    private final BitlyService bitlyService;
+    private final ShortLinkService shortLinkService;
 
     // ---------- Helper method to validate JWT token ----------
     private boolean isValidAdminToken(HttpServletRequest request) {
@@ -84,15 +86,16 @@ public class AdminSurveyController {
             row.setUploadedBy(req.getUploadedBy());
             row.setStatus(LinkStatus.AVAILABLE);
 
-            // Automatically shorten the URL using Bit.ly
+            // Automatically generate short code and URL
             try {
-                String shortUrl = bitlyService.shortenUrl(url);
-                if (shortUrl != null && !shortUrl.isBlank()) {
-                    row.setShortLinkUrl(shortUrl);
-                }
+                String shortCode = shortLinkService.generateUniqueShortCode();
+                String shortUrl = shortLinkService.buildShortUrl(shortCode);
+                row.setShortCode(shortCode);
+                row.setShortLinkUrl(shortUrl);
             } catch (Exception e) {
                 // Log error but continue - don't block link upload if shortening fails
                 // The link will still be saved with just the long URL
+                log.warn("Failed to generate short link for URL: {}", url, e);
             }
 
             try {
@@ -273,17 +276,16 @@ public class AdminSurveyController {
                     String trimmedLink = newLink.trim();
                     link.setLinkUrl(trimmedLink);
                     
-                    // Re-shorten the URL if it changed
+                    // Re-generate short code and URL if link changed
                     try {
-                        String shortUrl = bitlyService.shortenUrl(trimmedLink);
-                        if (shortUrl != null && !shortUrl.isBlank()) {
-                            link.setShortLinkUrl(shortUrl);
-                        } else {
-                            // If shortening fails, clear the short link
-                            link.setShortLinkUrl(null);
-                        }
+                        String shortCode = shortLinkService.generateUniqueShortCode();
+                        String shortUrl = shortLinkService.buildShortUrl(shortCode);
+                        link.setShortCode(shortCode);
+                        link.setShortLinkUrl(shortUrl);
                     } catch (Exception e) {
                         // Log error but continue - don't block update if shortening fails
+                        log.warn("Failed to generate short link for updated URL: {}", trimmedLink, e);
+                        link.setShortCode(null);
                         link.setShortLinkUrl(null);
                     }
                     

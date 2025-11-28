@@ -30,6 +30,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
                 // Public endpoints
+                .requestMatchers("/s/**").permitAll()  // Short link redirects - must be public
                 .requestMatchers("/api/otp/**").permitAll()
                 .requestMatchers("/api/participants/**").permitAll()
                 .requestMatchers("/api/messages/**").permitAll()

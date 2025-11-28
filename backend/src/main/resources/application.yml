@@ -41,6 +41,8 @@ management:
 app:
   phone:
     defaultRegion: US
+  shortlink:
+    baseUrl: ${SHORTLINK_BASE_URL:https://health.networks.howard.edu}
 
 twilio:
   accountSid: ${TWILIO_ACCOUNT_SID:}

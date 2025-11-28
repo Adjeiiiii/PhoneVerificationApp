@@ -74,4 +74,15 @@ public interface SurveyLinkPoolRepository extends JpaRepository<SurveyLinkPool, 
         String getStatus();
         Long getCnt();
     }
+
+    // ---- Short link methods ----
+    /**
+     * Check if a short code already exists.
+     */
+    boolean existsByShortCode(String shortCode);
+
+    /**
+     * Find link by short code (for redirect).
+     */
+    Optional<SurveyLinkPool> findByShortCode(String shortCode);
 }
