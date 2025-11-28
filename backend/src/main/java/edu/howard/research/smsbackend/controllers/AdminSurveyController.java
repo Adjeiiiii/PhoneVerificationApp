@@ -33,7 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -342,6 +344,24 @@ public class AdminSurveyController {
         return ResponseEntity.ok(inviteRepo.findAll(pageable));
     }
 
+    // ---------- List verified participants without invitations ----------
+    @GetMapping("/participants/verified-without-invitations")
+    public ResponseEntity<?> listVerifiedWithoutInvitations(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "25") @Min(1) int size,
+            HttpServletRequest request
+    ) {
+        // Check authentication
+        if (!isValidAdminToken(request)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized access"));
+        }
+        Pageable pageable = PageRequest.of(page, Math.min(size, 200),
+                Sort.by(Sort.Direction.DESC, "verifiedAt", "createdAt"));
+        
+        return ResponseEntity.ok(participantRepo.findVerifiedWithoutInvitations(pageable));
+    }
+
     // ---------- General stats ----------
     @GetMapping("/stats")
     public ResponseEntity<?> getStats(HttpServletRequest request) {
@@ -370,6 +390,108 @@ public class AdminSurveyController {
         return linkRepo.fetchStats();
     }
 
+    // ---------- Send invitation with specific link ID ----------
+    @PostMapping("/invitations/send-with-link")
+    public Map<String, Object> sendWithSpecificLink(@RequestBody Map<String, String> body) {
+        String rawPhone = Objects.requireNonNull(body.get("phone"), "phone required");
+        String linkIdStr = Objects.requireNonNull(body.get("linkId"), "linkId required");
+        String phone = phoneNumberService.normalizeToE164(rawPhone);
+        UUID linkId;
+        
+        try {
+            linkId = UUID.fromString(linkIdStr);
+        } catch (IllegalArgumentException e) {
+            return Map.of(
+                    "ok", false,
+                    "error", "invalid_link_id",
+                    "message", "Invalid link ID format."
+            );
+        }
+
+        // 0) Require participant to exist and be OTP-verified
+        Participant p = participantRepo.findByPhone(phone)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown participant: " + phone));
+        if (!p.isPhoneVerified()) {
+            return Map.of(
+                    "ok", false,
+                    "error", "not_verified",
+                    "message", "Phone must be verified before sending a survey link."
+            );
+        }
+
+        // 1) Check if participant already has an active invitation
+        Optional<SurveyInvitation> existing = inviteRepo.findActiveByPhone(phone);
+        if (existing.isPresent()) {
+            return Map.of(
+                    "ok", false,
+                    "error", "already_has_invitation",
+                    "message", "Participant already has an active survey invitation."
+            );
+        }
+
+        // 2) Get the specified link
+        SurveyLinkPool link = linkRepo.findById(linkId)
+                .orElseThrow(() -> new IllegalArgumentException("Link not found: " + linkId));
+        
+        if (link.getStatus() != LinkStatus.AVAILABLE) {
+            return Map.of(
+                    "ok", false,
+                    "error", "link_not_available",
+                    "message", "The selected link is not available. It may have already been assigned."
+            );
+        }
+
+        // 3) Create invitation with the specific link
+        SurveyInvitation inv = new SurveyInvitation();
+        inv.setParticipant(p);
+        inv.setLink(link);
+        inv.setLinkUrl(link.getLinkUrl());
+        inv.setShortLinkUrl(link.getShortLinkUrl());
+        inv.setCreatedAt(OffsetDateTime.now());
+        inv.setMessageStatus("pending");
+        inv = inviteRepo.save(inv);
+
+        // 4) Mark link as assigned
+        linkRepo.markAssigned(linkId);
+
+        // 5) Send SMS - use short link if available, otherwise use long link
+        String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 
+                ? inv.getShortLinkUrl() 
+                : inv.getLinkUrl();
+        String smsBody = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
+        Map<String, Object> send = smsService.send(phone, smsBody);
+
+        // 6) Send email if participant has email address
+        if (p.getEmail() != null && !p.getEmail().trim().isEmpty()) {
+            emailService.sendSurveyLink(p.getEmail(), p.getName(), linkToSend);
+        }
+
+        // 7) Persist queued state if accepted by Twilio
+        if (Boolean.TRUE.equals(send.get("ok"))) {
+            String sid = (String) send.get("sid");
+            invitationsService.markQueued(inv.getId(), sid);
+
+            return Map.of(
+                    "ok", true,
+                    "invitationId", inv.getId(),
+                    "participantId", inv.getParticipant().getId(),
+                    "status", "queued",
+                    "messageSid", sid,
+                    "linkUrl", inv.getLinkUrl()
+            );
+        } else {
+            // Keep the invitation; report send failure
+            return Map.of(
+                    "ok", false,
+                    "invitationId", inv.getId(),
+                    "participantId", inv.getParticipant().getId(),
+                    "status", inv.getMessageStatus(),
+                    "error", String.valueOf(send.get("error")),
+                    "linkUrl", inv.getLinkUrl()
+            );
+        }
+    }
+
     // ---------- Send/Resend invitation (requires verified phone) ----------
     @PostMapping("/invitations/send")
     public Map<String, Object> sendOrResend(@RequestBody Map<String, String> body) {
@@ -389,7 +511,18 @@ public class AdminSurveyController {
         }
 
         // 1) Idempotent allocation
-        SurveyInvitation inv = invitationsService.getOrAssignByPhoneWithRetry(phone, batch);
+        Optional<SurveyInvitation> invOpt = invitationsService.getOrAssignByPhoneWithRetry(phone, batch);
+
+        if (invOpt.isEmpty()) {
+            // No links available
+            return Map.of(
+                    "ok", false,
+                    "error", "no_links_available",
+                    "message", "No survey links are currently available. Please contact the administrator or try again later."
+            );
+        }
+
+        SurveyInvitation inv = invOpt.get();
 
         // 2) Send SMS - use short link if available, otherwise use long link
         String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 

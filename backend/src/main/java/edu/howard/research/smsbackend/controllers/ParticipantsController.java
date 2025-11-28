@@ -181,10 +181,20 @@ public class ParticipantsController {
                     "message", "Survey link sent successfully!"
                 ));
             } else {
-                return ResponseEntity.ok(Map.of(
-                    "ok", false,
-                    "error", "Failed to send survey link: " + result.reason()
-                ));
+                // Check if it's a "no links available" error
+                if ("no_links_available".equals(result.reason())) {
+                    return ResponseEntity.ok(Map.of(
+                        "ok", false,
+                        "error", "no_links_available",
+                        "message", "No survey links are currently available. Please contact the administrator or try again later."
+                    ));
+                } else {
+                    return ResponseEntity.ok(Map.of(
+                        "ok", false,
+                        "error", result.reason() != null ? result.reason() : "unknown_error",
+                        "message", "Failed to send survey link: " + (result.reason() != null ? result.reason() : "Unknown error")
+                    ));
+                }
             }
         } catch (Exception e) {
             log.error("Error in resend survey link: {}", e.getMessage(), e);

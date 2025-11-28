@@ -41,7 +41,14 @@ const AdminDashboard: React.FC = () => {
   });
 
   const [records, setRecords] = useState<VerificationRecord[]>([]);
+  const [verifiedWithoutInvitations, setVerifiedWithoutInvitations] = useState<any[]>([]);
+  const [availableLinks, setAvailableLinks] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'invitations' | 'waiting'>('invitations');
+  const [showLinkSelectionModal, setShowLinkSelectionModal] = useState(false);
+  const [selectedParticipantForLink, setSelectedParticipantForLink] = useState<any>(null);
+  const [selectedLinkId, setSelectedLinkId] = useState<string>('');
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
 
 
   // For multiple select
@@ -108,7 +115,63 @@ const AdminDashboard: React.FC = () => {
       navigate('/admin-login');
       return;
     }
+    
+    // Check if token is expired
+    try {
+      const tokenParts = token.split('.');
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        if (payload.exp && Date.now() >= payload.exp * 1000) {
+          // Token expired
+          localStorage.removeItem('adminToken');
+          navigate('/admin-login?expired=true');
+          return;
+        }
+      } else {
+        // Invalid token format
+        localStorage.removeItem('adminToken');
+        navigate('/admin-login?expired=true');
+        return;
+      }
+    } catch (error) {
+      // Token is malformed
+      localStorage.removeItem('adminToken');
+      navigate('/admin-login?expired=true');
+      return;
+    }
+    
     fetchStatsAndRecords();
+    
+    // Set up periodic token expiration check (every 30 seconds)
+    const tokenCheckInterval = setInterval(() => {
+      const currentToken = localStorage.getItem('adminToken');
+      if (!currentToken) {
+        navigate('/admin-login');
+        return;
+      }
+      
+      try {
+        const tokenParts = currentToken.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          if (payload.exp && Date.now() >= payload.exp * 1000) {
+            // Token expired
+            localStorage.removeItem('adminToken');
+            navigate('/admin-login?expired=true');
+          }
+        } else {
+          // Invalid token format
+          localStorage.removeItem('adminToken');
+          navigate('/admin-login?expired=true');
+        }
+      } catch (error) {
+        // Token is malformed
+        localStorage.removeItem('adminToken');
+        navigate('/admin-login?expired=true');
+      }
+    }, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(tokenCheckInterval);
   }, [navigate]);
 
 
@@ -156,7 +219,35 @@ const AdminDashboard: React.FC = () => {
         setRecords([]);
       });
 
-    // Links fetching removed - no longer used
+    // 3) Fetch verified participants without invitations
+    api.get('/api/admin/participants/verified-without-invitations?page=0&size=100')
+      .then((data: any) => {
+        console.log('Verified without invitations data:', data);
+        if (data && data.content) {
+          setVerifiedWithoutInvitations(data.content);
+        } else {
+          setVerifiedWithoutInvitations([]);
+        }
+      })
+      .catch((err) => {
+        console.error('Verified without invitations error:', err);
+        setVerifiedWithoutInvitations([]);
+      });
+
+    // 4) Fetch available links for selection
+    api.get('/api/admin/links?status=AVAILABLE&page=0&size=100')
+      .then((data: any) => {
+        console.log('Available links data:', data);
+        if (data && data.content) {
+          setAvailableLinks(data.content);
+        } else {
+          setAvailableLinks([]);
+        }
+      })
+      .catch((err) => {
+        console.error('Available links error:', err);
+        setAvailableLinks([]);
+      });
   };
 
   // For searching phone_number, email, link, or status
@@ -506,8 +597,14 @@ const AdminDashboard: React.FC = () => {
   // Add click outside handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (activeActionMenu !== null && !(event.target as Element).closest('.relative')) {
-        setActiveActionMenu(null);
+      const target = event.target as Element;
+      if (activeActionMenu !== null) {
+        // Check if click is outside the menu and the button
+        const isClickInsideMenu = target.closest('[role="menu"]');
+        const isClickOnButton = target.closest('button[aria-label="Actions"]');
+        if (!isClickInsideMenu && !isClickOnButton) {
+          setActiveActionMenu(null);
+        }
       }
     };
 
@@ -532,11 +629,11 @@ const AdminDashboard: React.FC = () => {
         passedUsersCount={0}
         failedUsersCount={0}
       />
-      <div className="flex-1 overflow-auto pt-16 pb-12">
-        <div className="container mx-auto px-4 py-8">
+      <div className="flex-1 flex flex-col overflow-hidden pt-16 pb-12">
+        <div className="container mx-auto px-4 py-4 flex-1 flex flex-col overflow-hidden">
           {/* Notification Banner */}
           {bulkActionMessage && (
-            <div className={`mb-4 p-4 rounded-md ${
+            <div className={`mb-4 p-4 rounded-md flex-shrink-0 ${
               isSuccessMessage(bulkActionMessage)
                 ? 'bg-green-100 text-green-800 border border-green-200' 
                 : 'bg-red-100 text-red-800 border border-red-200'
@@ -556,22 +653,48 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Stats Section */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white rounded-lg shadow p-3 text-center">
-              <h3 className="text-gray-600 text-xs md:text-sm mb-1">
-                Total Verifications
-              </h3>
-              <p className="text-lg md:text-xl font-semibold">
-                {stats.totalVerifications}
-              </p>
+          {/* Tabs */}
+          <div className="bg-white rounded-lg shadow mb-4 flex-shrink-0">
+            <div className="border-b border-gray-200">
+              <nav className="flex -mb-px">
+                <button
+                  onClick={() => setActiveTab('invitations')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'invitations'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  All Invitations
+                  <span className="ml-2 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">
+                    {records.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('waiting')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'waiting'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Verified Without Links
+                  {verifiedWithoutInvitations.length > 0 && (
+                    <span className="ml-2 bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">
+                      {verifiedWithoutInvitations.length}
+                    </span>
+                  )}
+                </button>
+              </nav>
             </div>
           </div>
 
-          {/* Records Table */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          {/* Records Table - Invitations Tab */}
+          {activeTab === 'invitations' && (
+          <div className="bg-white rounded-lg shadow overflow-hidden flex-1 flex flex-col min-h-0">
             {/* Bulk Actions Bar */}
-            <div className="bg-gray-50 border-b border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4">
+            {currentRecords.length > 0 && (
+            <div className="bg-gray-50 border-b border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4 flex-shrink-0">
               <div className="flex flex-wrap gap-3">
                 <button
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors
@@ -622,12 +745,24 @@ const AdminDashboard: React.FC = () => {
                 <span className="text-sm text-gray-600">entries</span>
               </div>
             </div>
+            )}
 
-            {/* Table */}
-            <div className="overflow-x-auto overflow-y-visible relative">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="bg-gray-200 text-gray-700 text-left">
+            {currentRecords.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center py-12">
+                <div className="text-center">
+                  <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                  <p className="text-gray-600 text-lg font-medium">No invitations found</p>
+                  <p className="text-gray-500 text-sm mt-1">Invitations will appear here once participants are verified and receive survey links.</p>
+                </div>
+              </div>
+            ) : (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 overflow-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="sticky top-0 bg-gray-200 z-10">
+                    <tr className="bg-gray-200 text-gray-700 text-left">
                     <th className="p-2 w-10">
                       <input
                         type="checkbox"
@@ -649,13 +784,7 @@ const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentRecords.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="p-4 text-center text-gray-500">
-                        No records found.
-                      </td>
-                    </tr>
-                  ) : (
+                  {
                     currentRecords.map((r) => {
                       // const _link = r.assigned_link || 'None Assigned';
                       return (
@@ -674,7 +803,7 @@ const AdminDashboard: React.FC = () => {
                               r.status === 'sent' ? 'bg-blue-100 text-blue-800' :
                               r.status === 'accepted' ? 'bg-green-100 text-green-800' :
                               r.status === 'failed' ? 'bg-red-100 text-red-800' :
-                              r.status === 'queued' ? 'bg-yellow-100 text-yellow-800' :
+                              r.status === 'queued' ? 'bg-blue-100 text-blue-800' :
                               'bg-gray-100 text-gray-800'
                             }`}>
                               {r.status || 'pending'}
@@ -753,9 +882,31 @@ const AdminDashboard: React.FC = () => {
                           <td className="p-2">
                             <div className="relative">
                               <button
-                                onClick={() => toggleActionMenu(r.id)}
-                                className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-700 focus:outline-none"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const button = e.currentTarget;
+                                  const rect = button.getBoundingClientRect();
+                                  const menuHeight = 100; // Approximate menu height
+                                  const spaceBelow = window.innerHeight - rect.bottom;
+                                  const spaceAbove = rect.top;
+                                  
+                                  // Position menu below button if there's enough space, otherwise above
+                                  let top: number;
+                                  if (spaceBelow >= menuHeight || spaceBelow > spaceAbove) {
+                                    top = rect.bottom + 4;
+                                  } else {
+                                    top = rect.top - menuHeight - 4;
+                                  }
+                                  
+                                  setMenuPosition({
+                                    top: top + window.scrollY,
+                                    right: window.innerWidth - rect.right
+                                  });
+                                  toggleActionMenu(r.id);
+                                }}
+                                className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-700 focus:outline-none cursor-pointer"
                                 aria-label="Actions"
+                                type="button"
                               >
                                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
@@ -763,12 +914,12 @@ const AdminDashboard: React.FC = () => {
                               </button>
                               {activeActionMenu === r.id && (
                                 <div 
-                                  className="fixed transform -translate-x-full mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5"
+                                  className="fixed w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-[100]"
                                   style={{
-                                    zIndex: 1000,
-                                    top: 'auto',
-                                    left: 'auto'
+                                    top: `${menuPosition.top}px`,
+                                    right: `${menuPosition.right}px`
                                   }}
+                                  onClick={(e) => e.stopPropagation()}
                                 >
                                   <div className="py-1" role="menu">
                                     <button
@@ -808,13 +959,13 @@ const AdminDashboard: React.FC = () => {
                                       }}
                                       className={`flex items-center w-full px-4 py-2 text-sm text-left ${
                                         r.completed_at 
-                                          ? 'text-yellow-700 hover:bg-yellow-100' 
+                                          ? 'text-gray-700 hover:bg-gray-100' 
                                           : 'text-green-700 hover:bg-green-100'
                                       }`}
                                       role="menuitem"
                                     >
                                       <svg className={`mr-3 h-4 w-4 flex-shrink-0 ${
-                                        r.completed_at ? 'text-yellow-500' : 'text-green-500'
+                                        r.completed_at ? 'text-gray-500' : 'text-green-500'
                                       }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         {r.completed_at ? (
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -845,13 +996,16 @@ const AdminDashboard: React.FC = () => {
                         </tr>
                       );
                     })
-                  )}
+                  }
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
+            )}
 
             {/* Pagination */}
-            <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between">
+            {currentRecords.length > 0 && (
+            <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
               <div className="text-sm text-gray-700">
                 Showing {indexOfFirstRecord + 1} to {Math.min(indexOfLastRecord, filteredRecords.length)} of {filteredRecords.length} entries
               </div>
@@ -893,9 +1047,159 @@ const AdminDashboard: React.FC = () => {
                 </button>
               </div>
             </div>
+            )}
           </div>
+          )}
+
+          {/* Verified Without Links Tab */}
+          {activeTab === 'waiting' && (
+          <div className="bg-white rounded-lg shadow overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="p-6 flex-shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">
+                    Verified Participants Without Survey Links
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    These participants have verified their phone numbers but did not receive survey links (no links were available at the time).
+                  </p>
+                </div>
+                {verifiedWithoutInvitations.length > 0 && (
+                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                    {verifiedWithoutInvitations.length} participant{verifiedWithoutInvitations.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {verifiedWithoutInvitations.length === 0 ? (
+              <div className="text-center py-12 flex-1 flex items-center justify-center">
+                <div>
+                  <div className="text-gray-400 mb-2">
+                    <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-600 text-lg font-medium">All verified participants have received survey links!</p>
+                  <p className="text-gray-500 text-sm mt-1">No participants are waiting for links.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-auto px-6 pb-6">
+                    <table className="w-full border-collapse text-sm">
+                      <thead className="sticky top-0 bg-gray-50 z-10">
+                        <tr className="bg-gray-50 text-gray-700 text-left border-b">
+                          <th className="p-3 font-semibold">Phone Number</th>
+                          <th className="p-3 font-semibold">Email</th>
+                          <th className="p-3 font-semibold">Verified At</th>
+                          <th className="p-3 font-semibold">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                      {verifiedWithoutInvitations.map((participant: any) => (
+                        <tr key={participant.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 font-medium">{participant.phone}</td>
+                          <td className="p-3">{participant.email || <span className="text-gray-400">No email</span>}</td>
+                          <td className="p-3">
+                            {participant.verifiedAt 
+                              ? formatSmsSentAt(participant.verifiedAt)
+                              : <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="p-3">
+                            <div className="relative z-10">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const button = e.currentTarget;
+                                  const rect = button.getBoundingClientRect();
+                                  const menuHeight = 100; // Approximate menu height
+                                  const spaceBelow = window.innerHeight - rect.bottom;
+                                  const spaceAbove = rect.top;
+                                  
+                                  // Position menu below button if there's enough space, otherwise above
+                                  let top: number;
+                                  if (spaceBelow >= menuHeight || spaceBelow > spaceAbove) {
+                                    top = rect.bottom + 4;
+                                  } else {
+                                    top = rect.top - menuHeight - 4;
+                                  }
+                                  
+                                  setMenuPosition({
+                                    top: top + window.scrollY,
+                                    right: window.innerWidth - rect.right
+                                  });
+                                  toggleActionMenu(participant.id);
+                                }}
+                                className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-700 focus:outline-none cursor-pointer"
+                                aria-label="Actions"
+                                type="button"
+                              >
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                              </button>
+                              {activeActionMenu === participant.id && (
+                                <div 
+                                  className="fixed w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-[100]"
+                                  style={{
+                                    top: `${menuPosition.top}px`,
+                                    right: `${menuPosition.right}px`
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="py-1" role="menu">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedParticipantForLink(participant);
+                                        setSelectedLinkId('');
+                                        setShowLinkSelectionModal(true);
+                                        setActiveActionMenu(null);
+                                      }}
+                                      className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-blue-50"
+                                      role="menuitem"
+                                    >
+                                      <svg className="mr-3 h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                      </svg>
+                                      Assign and Send Link
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        setActiveActionMenu(null);
+                                        if (window.confirm(`Are you sure you want to delete participant ${participant.phone}? This action cannot be undone.`)) {
+                                          try {
+                                            const response = await api.deleteUser(participant.id);
+                                            setBulkActionMessage('Participant deleted successfully');
+                                            fetchStatsAndRecords(); // Refresh both lists
+                                          } catch (error: any) {
+                                            setBulkActionMessage(`Error deleting participant: ${error.message || 'Unknown error'}`);
+                                          }
+                                        }
+                                      }}
+                                      className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                      role="menuitem"
+                                    >
+                                      <svg className="mr-3 h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      </tbody>
+                    </table>
+              </div>
+            )}
+          </div>
+          )}
         </div>
       </div>
+
       <Footer />
 
 
@@ -996,18 +1300,18 @@ const AdminDashboard: React.FC = () => {
             
             {/* Gift Card Warning */}
             {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards && (
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+              <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <h3 className="text-sm font-medium text-yellow-800">
-                      Warning: User has {deleteGiftCardInfo.giftCardCount} gift card(s)
+                    <h3 className="text-sm font-medium text-blue-800">
+                      Notice: User has {deleteGiftCardInfo.giftCardCount} gift card(s)
                     </h3>
-                    <div className="mt-2 text-sm text-yellow-700">
+                    <div className="mt-2 text-sm text-blue-700">
                       <p className="mb-2">
                         This user has been assigned gift card(s). Deleting them will:
                       </p>
@@ -1021,7 +1325,7 @@ const AdminDashboard: React.FC = () => {
                           <p className="font-medium">Gift Card Details:</p>
                           <div className="mt-1 space-y-1">
                             {deleteGiftCardInfo.giftCards.map((gc: any, index: number) => (
-                              <div key={index} className="text-xs bg-yellow-100 p-2 rounded">
+                              <div key={index} className="text-xs bg-blue-100 p-2 rounded">
                                 <span className="font-medium">{gc.cardCode}</span> - {gc.cardType} (${gc.cardValue})
                                 {gc.status === 'SENT' && <span className="ml-2 text-green-600">• Sent</span>}
                                 {gc.status === 'UNSENT' && <span className="ml-2 text-gray-600">• Unsent</span>}
@@ -1127,7 +1431,7 @@ const AdminDashboard: React.FC = () => {
                 Mark as Completed
               </button>
               <button
-                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center"
+                className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center"
                 onClick={async () => {
                   await handleBulkMarkSurveysUncompleted();
                   setShowBulkSurveyModal(false);
@@ -1144,6 +1448,98 @@ const AdminDashboard: React.FC = () => {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Link Selection Modal */}
+      {showLinkSelectionModal && selectedParticipantForLink && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                Assign and Send Survey Link
+              </h3>
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  <span className="font-medium">Participant:</span> {selectedParticipantForLink.phone}
+                </p>
+                {selectedParticipantForLink.email && (
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Email:</span> {selectedParticipantForLink.email}
+                  </p>
+                )}
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select a Survey Link
+                </label>
+                <select
+                  value={selectedLinkId}
+                  onChange={(e) => setSelectedLinkId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select a link...</option>
+                  {availableLinks.map((link: any) => (
+                    <option key={link.id} value={link.id}>
+                      {link.shortLinkUrl || link.linkUrl?.substring(0, 60) || 'Link ' + link.id.substring(0, 8)}
+                      {link.batchLabel ? ` (${link.batchLabel})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {availableLinks.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-2">No available links in the database.</p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowLinkSelectionModal(false);
+                    setSelectedParticipantForLink(null);
+                    setSelectedLinkId('');
+                  }}
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!selectedLinkId) {
+                      setBulkActionMessage('Please select a link first');
+                      return;
+                    }
+                    try {
+                      const response = await api.post('/api/admin/invitations/send-with-link', {
+                        phone: selectedParticipantForLink.phone,
+                        linkId: selectedLinkId
+                      });
+                      if (response.ok) {
+                        setBulkActionMessage(`Survey link sent successfully to ${selectedParticipantForLink.phone}`);
+                        setShowLinkSelectionModal(false);
+                        setSelectedParticipantForLink(null);
+                        setSelectedLinkId('');
+                        fetchStatsAndRecords(); // Refresh to move them to main table
+                        setActiveTab('invitations'); // Switch to invitations tab
+                      } else {
+                        setBulkActionMessage(`Failed to send link: ${response.error || response.message}`);
+                      }
+                    } catch (error: any) {
+                      setBulkActionMessage(`Error: ${error.message || 'Failed to send survey link'}`);
+                    }
+                  }}
+                  disabled={!selectedLinkId}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    selectedLinkId
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Assign and Send
+                </button>
+              </div>
             </div>
           </div>
         </div>

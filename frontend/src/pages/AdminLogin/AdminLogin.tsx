@@ -13,7 +13,23 @@ const AdminLogin: React.FC = () => {
   useEffect(() => {
     const existingToken = localStorage.getItem("adminToken");
     if (existingToken) {
-      navigate('/admin-dashboard');
+      // Check if token is expired
+      try {
+        const tokenParts = existingToken.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          if (payload.exp && Date.now() < payload.exp * 1000) {
+            // Token is still valid, navigate to dashboard
+            navigate('/admin-dashboard');
+            return;
+          }
+        }
+        // Token is expired or invalid, remove it
+        localStorage.removeItem('adminToken');
+      } catch (error) {
+        // Token is malformed, remove it
+        localStorage.removeItem('adminToken');
+      }
     }
 
     // Check if redirected due to expired token

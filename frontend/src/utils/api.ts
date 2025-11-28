@@ -38,6 +38,32 @@ export const normalizePhoneNumber = (phone: string): string => {
   return `+1${digits}`;
 };
 
+// Utility function to check if token is expired
+const isTokenExpired = (token: string): boolean => {
+  try {
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) {
+      return true; // Invalid token format
+    }
+    const payload = JSON.parse(atob(tokenParts[1]));
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      return true; // Token expired
+    }
+    return false;
+  } catch (error) {
+    return true; // Token is malformed
+  }
+};
+
+// Utility function to handle logout when authentication fails
+const handleLogout = () => {
+  localStorage.removeItem('adminToken');
+  // Only redirect if we're on an admin page
+  if (window.location.pathname.startsWith('/admin')) {
+    window.location.href = '/admin-login?expired=true';
+  }
+};
+
 const handleResponse = async (response: Response) => {
   // Log all response details for debugging
   console.log('Response received:', {
@@ -73,14 +99,21 @@ const handleResponse = async (response: Response) => {
       data: data
     });
     
+    // Handle authentication errors - auto logout
+    if (response.status === 401 || response.status === 403) {
+      console.warn('Authentication failed - logging out user');
+      handleLogout();
+      const error = new Error('Your session has expired. Please log in again.') as ApiError;
+      error.status = response.status;
+      throw error;
+    }
+    
     let errorMessage = 'An error occurred';
     
     if (data?.error) {
       errorMessage = data.error;
     } else if (data?.message) {
       errorMessage = data.message;
-    } else if (response.status === 403) {
-      errorMessage = 'Access denied. Please check your permissions.';
     } else if (response.status === 400) {
       errorMessage = 'Invalid request. Please check your input.';
     } else if (response.status === 404) {
@@ -107,7 +140,17 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
+        // Check if token is expired before making the request
+        if (isTokenExpired(token)) {
+          console.warn('Token expired - logging out user');
+          handleLogout();
+          throw new Error('Your session has expired. Please log in again.');
+        }
         (headers as any)['Authorization'] = `Bearer ${token}`;
+      } else {
+        // No token for admin endpoint - redirect to login
+        handleLogout();
+        throw new Error('Please log in to access this resource.');
       }
     }
     
@@ -127,12 +170,20 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
+        // Check if token is expired before making the request
+        if (isTokenExpired(token)) {
+          console.warn('Token expired - logging out user');
+          handleLogout();
+          throw new Error('Your session has expired. Please log in again.');
+        }
         (headers as any)['Authorization'] = `Bearer ${token}`;
         console.log('POST request to:', endpoint);
         console.log('Token present:', !!token);
         console.log('Token (first 20 chars):', token?.substring(0, 20) + '...');
       } else {
-        console.warn('No admin token found for admin endpoint:', endpoint);
+        // No token for admin endpoint - redirect to login
+        handleLogout();
+        throw new Error('Please log in to access this resource.');
       }
     }
     
@@ -154,7 +205,17 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
+        // Check if token is expired before making the request
+        if (isTokenExpired(token)) {
+          console.warn('Token expired - logging out user');
+          handleLogout();
+          throw new Error('Your session has expired. Please log in again.');
+        }
         (headers as any)['Authorization'] = `Bearer ${token}`;
+      } else {
+        // No token for admin endpoint - redirect to login
+        handleLogout();
+        throw new Error('Please log in to access this resource.');
       }
     }
     
@@ -173,7 +234,17 @@ export const api = {
     if (endpoint.startsWith('/api/admin/')) {
       const token = localStorage.getItem('adminToken');
       if (token) {
+        // Check if token is expired before making the request
+        if (isTokenExpired(token)) {
+          console.warn('Token expired - logging out user');
+          handleLogout();
+          throw new Error('Your session has expired. Please log in again.');
+        }
         (headers as any)['Authorization'] = `Bearer ${token}`;
+      } else {
+        // No token for admin endpoint - redirect to login
+        handleLogout();
+        throw new Error('Please log in to access this resource.');
       }
     }
     

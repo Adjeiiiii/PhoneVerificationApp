@@ -169,13 +169,12 @@ const PhoneVerification: React.FC = () => {
       const data = await api.checkOtp(phoneNumber, code, email, undefined);
       
       if (data.verified) {
-        setIsVerified(true);
-        
         // Send survey invitation
         try {
           const invitationData = await api.sendSurveyInvitation(phoneNumber);
           
           if (invitationData.ok) {
+            setIsVerified(true);
             setAssignedLink(invitationData.linkUrl || '');
             setStep('done');
             showNotification('success', 'Verification successful! Your survey link is ready.');
@@ -185,13 +184,39 @@ const PhoneVerification: React.FC = () => {
               showNotification('success', 'Survey link sent via SMS!');
             }
           } else {
-            setVerificationError(invitationData.error || 'Could not retrieve survey link.');
-            showNotification('error', 'Could not retrieve survey link. Please try again.');
+            // Check if it's a "no links available" error
+            if (invitationData.error === 'no_links_available' || 
+                (invitationData.message && invitationData.message.includes('No survey links'))) {
+              setVerificationError(
+                'No survey links are currently available. Please contact the administrator at (240) 428-8442 or try again later.'
+              );
+              showNotification(
+                'error', 
+                'No survey links available. Please contact the administrator or try again later.',
+                8000 // Show for 8 seconds
+              );
+              // Don't mark as verified - allow them to retry
+              // Clear the code so they can try again
+              setCodeDigits(Array(6).fill(''));
+              const firstBox = document.getElementById('otp-0') as HTMLInputElement;
+              if (firstBox) firstBox.focus();
+            } else {
+              setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
+              showNotification('error', invitationData.message || 'Could not retrieve survey link. Please try again.');
+              // Don't mark as verified if link assignment failed
+              setCodeDigits(Array(6).fill(''));
+              const firstBox = document.getElementById('otp-0') as HTMLInputElement;
+              if (firstBox) firstBox.focus();
+            }
           }
         } catch (invitationError: any) {
           console.error('Survey invitation error:', invitationError);
           setVerificationError(`Error: ${invitationError.message}`);
           showNotification('error', 'Failed to get survey link. Please try again.');
+          // Don't mark as verified if link assignment failed
+          setCodeDigits(Array(6).fill(''));
+          const firstBox = document.getElementById('otp-0') as HTMLInputElement;
+          if (firstBox) firstBox.focus();
         }
       } else {
         setVerificationError("That code didn't work. Try again or resend.");

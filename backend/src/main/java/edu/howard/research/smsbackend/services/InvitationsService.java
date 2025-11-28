@@ -26,14 +26,15 @@ public class InvitationsService {
     /**
      * Idempotent: if an active invitation already exists for the phone, return it (resend same link).
      * Otherwise claim one link from the pool and create a new invitation.
+     * Returns Optional.empty() if no links are available.
      * Does NOT assume a link relation or a batchLabel field on SurveyInvitation.
      */
     @Transactional
-    public SurveyInvitation getOrAssignByPhone(String phone, String batchLabel) {
+    public Optional<SurveyInvitation> getOrAssignByPhone(String phone, String batchLabel) {
         // 1) Reuse existing active invite
         Optional<SurveyInvitation> existing = inviteRepo.findActiveByPhone(phone);
         if (existing.isPresent()) {
-            return existing.get();
+            return existing;
         }
 
         // 2) Claim a link from the pool (by batch if provided, else any)
@@ -42,9 +43,8 @@ public class InvitationsService {
                 : linkRepo.claimAny().orElse(null);
 
         if (claim == null) {
-            throw new IllegalStateException(
-                    "No AVAILABLE links in pool" + (batchLabel != null ? " for batch " + batchLabel : "")
-            );
+            // No links available - return empty instead of throwing
+            return Optional.empty();
         }
 
         // 3) Load participant (must exist already)
@@ -70,7 +70,7 @@ public class InvitationsService {
         // 5) Flip the pool row to ASSIGNED (if that matches your state machine)
         linkRepo.markAssigned(claim.getLinkId());
 
-        return inv;
+        return Optional.of(inv);
     }
 
     /**
@@ -78,11 +78,11 @@ public class InvitationsService {
      * If the unique index on "active invite" trips, we fetch and return the existing invite.
      */
     @Transactional
-    public SurveyInvitation getOrAssignByPhoneWithRetry(String phone, String batchLabel) {
+    public Optional<SurveyInvitation> getOrAssignByPhoneWithRetry(String phone, String batchLabel) {
         try {
             return getOrAssignByPhone(phone, batchLabel);
         } catch (DataIntegrityViolationException e) {
-            return inviteRepo.findActiveByPhone(phone).orElseThrow(() -> e);
+            return inviteRepo.findActiveByPhone(phone);
         }
     }
 
