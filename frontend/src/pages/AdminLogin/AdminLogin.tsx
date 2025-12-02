@@ -20,7 +20,7 @@ const AdminLogin: React.FC = () => {
           const payload = JSON.parse(atob(tokenParts[1]));
           if (payload.exp && Date.now() < payload.exp * 1000) {
             // Token is still valid, navigate to dashboard
-            navigate('/admin-dashboard');
+            navigate('/admin-dashboard', { replace: true });
             return;
           }
         }
@@ -36,23 +36,31 @@ const AdminLogin: React.FC = () => {
     const expired = searchParams.get('expired');
     if (expired === 'true') {
       setLoginError('Your session has expired. Please log in again.');
+      // Clear the expired parameter from URL to prevent it from showing again
+      window.history.replaceState({}, '', '/admin-login');
     }
   }, [navigate, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError('');
+    setLoginError(''); // Clear any previous errors
 
     try {
       const data = await api.post('/api/admin/login', { username, password });
       if (data.success) {
         localStorage.setItem('adminToken', data.token);
-        navigate('/admin-dashboard');
+        navigate('/admin-dashboard', { replace: true });
       } else {
         setLoginError(data.error || 'Invalid credentials. Please try again.');
       }
     } catch (err: any) {
-      setLoginError(err.message || 'Server error. Please try again.');
+      // Don't show "session expired" error for login attempts
+      const errorMessage = err.message || 'Server error. Please try again.';
+      if (!errorMessage.toLowerCase().includes('expired')) {
+        setLoginError(errorMessage);
+      } else {
+        setLoginError('Invalid credentials. Please try again.');
+      }
       console.error(err);
     }
   };
@@ -94,7 +102,10 @@ const AdminLogin: React.FC = () => {
                   id="username"
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (loginError) setLoginError(''); // Clear error when user starts typing
+                  }}
                   className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   required
                 />
@@ -108,7 +119,10 @@ const AdminLogin: React.FC = () => {
                   id="password"
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (loginError) setLoginError(''); // Clear error when user starts typing
+                  }}
                   className="block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   required
                 />

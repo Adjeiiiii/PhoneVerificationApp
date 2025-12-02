@@ -6,7 +6,6 @@ import { VerificationProvider } from './contexts/VerificationProvider';
 import Survey from './pages/Survey/Survey';
 import PhoneVerification from './pages/PhoneVerification/PhoneVerification';
 import Landing from './pages/Landing/Landing';
-import Footer from './pages/Footer/Footer';
 
 // Admin pages
 import AdminLogin from './pages/AdminLogin/AdminLogin';
@@ -59,9 +58,6 @@ function App() {
           </div>
         </Router>
       </VerificationProvider>
-
-      {/* Footer pinned at bottom */}
-      <Footer />
     </div>
   );
 }

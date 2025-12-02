@@ -392,6 +392,7 @@ public class AdminSurveyController {
 
     // ---------- Send invitation with specific link ID ----------
     @PostMapping("/invitations/send-with-link")
+    @Transactional
     public Map<String, Object> sendWithSpecificLink(@RequestBody Map<String, String> body) {
         String rawPhone = Objects.requireNonNull(body.get("phone"), "phone required");
         String linkIdStr = Objects.requireNonNull(body.get("linkId"), "linkId required");
@@ -429,19 +430,24 @@ public class AdminSurveyController {
             );
         }
 
-        // 2) Get the specified link
+        // 2) Get the specified link (for reading linkUrl and shortLinkUrl)
         SurveyLinkPool link = linkRepo.findById(linkId)
                 .orElseThrow(() -> new IllegalArgumentException("Link not found: " + linkId));
         
-        if (link.getStatus() != LinkStatus.AVAILABLE) {
+        // 3) Atomically mark link as assigned - this is the critical race condition prevention
+        // The markAssigned method uses an atomic UPDATE with WHERE clause that checks status
+        // If another transaction already assigned it, this will return 0
+        int rowsUpdated = linkRepo.markAssigned(linkId);
+        if (rowsUpdated == 0) {
+            // Link was already assigned by another transaction or is not in AVAILABLE/RESERVED/CLAIMED status
             return Map.of(
                     "ok", false,
                     "error", "link_not_available",
-                    "message", "The selected link is not available. It may have already been assigned."
+                    "message", "The selected link is not available. It may have already been assigned to another participant."
             );
         }
 
-        // 3) Create invitation with the specific link
+        // 4) Create invitation with the specific link (only if assignment succeeded)
         SurveyInvitation inv = new SurveyInvitation();
         inv.setParticipant(p);
         inv.setLink(link);
@@ -450,9 +456,6 @@ public class AdminSurveyController {
         inv.setCreatedAt(OffsetDateTime.now());
         inv.setMessageStatus("pending");
         inv = inviteRepo.save(inv);
-
-        // 4) Mark link as assigned
-        linkRepo.markAssigned(linkId);
 
         // 5) Send SMS - use short link if available, otherwise use long link
         String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 

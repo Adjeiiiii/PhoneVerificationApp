@@ -192,8 +192,7 @@ const PhoneVerification: React.FC = () => {
               );
               showNotification(
                 'error', 
-                'No survey links available. Please contact the administrator or try again later.',
-                8000 // Show for 8 seconds
+                'No survey links available. Please contact the administrator or try again later.'
               );
               // Don't mark as verified - allow them to retry
               // Clear the code so they can try again

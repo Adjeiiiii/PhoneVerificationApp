@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AdminNavigation from '../../components/AdminNavigation';
+import AdminLayout from '../../components/AdminLayout';
 import { api } from '../../utils/api';
-import Footer from '../Footer/Footer';
-import Navbar from '../NavBar/Navbar';
 
 interface GiftCardPoolStatus {
   totalCards: number;
@@ -173,19 +171,9 @@ const GiftCardManagement: React.FC = () => {
 
   // For Navbar functionality
   const [searchQuery, setSearchQuery] = useState('');
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
-
-  const handleLogout = () => {
-    localStorage.removeItem('adminToken');
-    navigate('/admin-login');
-  };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
-  };
-
-  const toggleUserDropdown = () => {
-    setShowUserDropdown(!showUserDropdown);
   };
 
   useEffect(() => {
@@ -497,22 +485,8 @@ const GiftCardManagement: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-16">
-      <Navbar
-        searchQuery={searchQuery}
-        handleSearchChange={handleSearchChange}
-        handleLogout={handleLogout}
-        toggleUserDropdown={toggleUserDropdown}
-        showDropdown={showUserDropdown}
-        setShowDropdown={setShowUserDropdown}
-        newUsersCount={0}
-        markNotificationsAsSeen={() => {}}
-        leftContent={<AdminNavigation currentPage="gift-cards" />}
-        passedUsersCount={0}
-        failedUsersCount={0}
-      />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AdminLayout title="Gift Card Management" searchQuery={searchQuery} onSearchChange={handleSearchChange}>
+      <div className="container mx-auto px-6 py-6">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Gift Card Management</h1>
           <p className="mt-2 text-gray-600">Manage gift card distribution for research participants</p>
@@ -1702,9 +1676,7 @@ const GiftCardManagement: React.FC = () => {
           </div>
         </div>
       )}
-
-      <Footer />
-    </div>
+    </AdminLayout>
   );
 };
 

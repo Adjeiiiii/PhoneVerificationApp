@@ -39,7 +39,7 @@ public interface SurveyInvitationRepository extends JpaRepository<SurveyInvitati
     Optional<SurveyInvitation> findActiveByPhone(@Param("phone") String phone);
 
     // ---- State updates used by service / webhooks ----
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE SurveyInvitation i SET i.messageSid = :sid, i.messageStatus = :status, i.queuedAt = :queuedAt WHERE i.id = :id")
     int setQueued(@Param("id") UUID id,
                   @Param("sid") String sid,

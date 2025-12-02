@@ -1,9 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../NavBar/Navbar';
-import AdminNavigation from '../../components/AdminNavigation';
-import Footer from '../Footer/Footer';
+import AdminLayout from '../../components/AdminLayout';
 import { api } from '../../utils/api';
 
 interface LinkRecord {
@@ -20,8 +18,19 @@ type FilterOption = 'all' | 'used' | 'unused';
 const AdminDBOps: React.FC = () => {
   const navigate = useNavigate();
 
-  const [links, setLinks] = useState<LinkRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Try to load from cache first for instant display
+  const getInitialLinks = (): LinkRecord[] => {
+    try {
+      const cached = sessionStorage.getItem('adminDBOps_links');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const [links, setLinks] = useState<LinkRecord[]>(getInitialLinks());
+  const [loading, setLoading] = useState(getInitialLinks().length === 0);
+  const [isInitialLoad, setIsInitialLoad] = useState(getInitialLinks().length === 0);
 
   // For multiple select
   const [selectedLinkIds, setSelectedLinkIds] = useState<string[]>([]);
@@ -58,7 +67,6 @@ const AdminDBOps: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   // For Navbar user dropdown (handled inside Navbar)
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Dummy notifications: track the number of links when last seen
   const [lastSeenCount, setLastSeenCount] = useState<number>(0);
@@ -79,6 +87,28 @@ const AdminDBOps: React.FC = () => {
     if (!token) {
       navigate('/admin-login');
       return;
+    }
+    
+    // Check if we have cached data
+    const cachedData = sessionStorage.getItem('adminDBOps_links');
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        setLinks(parsed);
+        setLoading(false);
+        setIsInitialLoad(false);
+        // Still fetch fresh data in background
+        fetchLinks(token);
+        return;
+      } catch (e) {
+        // Invalid cache, continue with normal load
+      }
+    }
+    
+    // Only set loading if we don't have data yet
+    if (links.length === 0) {
+      setLoading(true);
+      setIsInitialLoad(true);
     }
     fetchLinks(token);
   }, [navigate]);
@@ -116,6 +146,9 @@ const AdminDBOps: React.FC = () => {
           });
           setLinks(convertedLinks);
           setLoading(false);
+          setIsInitialLoad(false);
+          // Cache the data for smooth navigation
+          sessionStorage.setItem('adminDBOps_links', JSON.stringify(convertedLinks));
           // On first load, initialize lastSeenCount
           if (lastSeenCount === 0) setLastSeenCount(convertedLinks.length);
         }
@@ -123,31 +156,16 @@ const AdminDBOps: React.FC = () => {
       .catch((err) => {
         console.error('Error fetching links:', err);
         setLoading(false);
+        setIsInitialLoad(false);
       });
   };
 
-  // Handle logout (like in AdminDashboard)
-  const handleLogout = () => {
-    const token = localStorage.getItem('adminToken');
-    if (!token) {
-      localStorage.removeItem('adminToken');
-      navigate('/admin-login');
-      return;
-    }
-    api.post('/api/admin/logout', {}, { headers: { Authorization: `Bearer ${token}` } })
-      .then(() => {
-        localStorage.removeItem('adminToken');
-        navigate('/admin-login');
-      })
-      .catch(() => {
-        localStorage.removeItem('adminToken');
-        navigate('/admin-login');
-      });
-  };
 
   // Handle search changes from Navbar
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
+    // Reset to first page when searching
+    setCurrentPage(1);
   };
 
   const getFilteredLinks = (): LinkRecord[] => {
@@ -324,15 +342,6 @@ const AdminDBOps: React.FC = () => {
     }
   };
 
-  // Toggle Navbar user dropdown
-  const toggleUserDropdown = () => {
-    setShowUserDropdown(!showUserDropdown);
-  };
-
-  // Calculate new notifications: new links added since last seen
-  const markNotificationsAsSeen = () => {
-    setLastSeenCount(links.length);
-  };
 
   // Clear action messages after 3s
   useEffect(() => {
@@ -437,36 +446,34 @@ const AdminDBOps: React.FC = () => {
   const paginatedLinks = filteredLinks.slice(indexOfFirstRecord, indexOfLastRecord);
   const totalPages = Math.ceil(filteredLinks.length / recordsPerPage);
 
-  if (loading) {
+  // Only show full loading screen on initial load
+  if (loading && isInitialLoad && links.length === 0) {
     return (
-      <div className="p-8">
-        <p>Loading links...</p>
-      </div>
+      <AdminLayout title="Database Operations" searchQuery={searchQuery} onSearchChange={handleSearchChange}>
+        <div className="container mx-auto px-6 py-6">
+          <div className="flex items-center justify-center p-8">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-gray-600">Loading links...</p>
+            </div>
+          </div>
+        </div>
+      </AdminLayout>
     );
   }
 
-  // Custom left content for the Navbar on this page
-  const leftContent = <AdminNavigation currentPage="database" />;
 
   return (
-    <div className="bg-gray-100 min-h-screen flex flex-col pt-16">
-      {/* Fixed Navbar */}
-      <Navbar
-        searchQuery={searchQuery}
-        handleSearchChange={handleSearchChange}
-        handleLogout={handleLogout}
-        toggleUserDropdown={toggleUserDropdown}
-        showDropdown={showUserDropdown}
-        setShowDropdown={setShowUserDropdown}
-        newUsersCount={0}
-        passedUsersCount={0}
-        failedUsersCount={0}
-        markNotificationsAsSeen={markNotificationsAsSeen}
-        leftContent={leftContent}
-      />
-
-      {/* CONTENT */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+    <AdminLayout title="Database Operations" searchQuery={searchQuery} onSearchChange={handleSearchChange}>
+      <div className="container mx-auto px-6 py-6">
+        {loading && !isInitialLoad && (
+          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md">
+            <div className="flex items-center gap-2 text-blue-700 text-sm">
+              <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              <span>Refreshing data...</span>
+            </div>
+          </div>
+        )}
         {actionMessage && (
           <div className={`mb-4 p-4 rounded-md ${
             actionMessage.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -527,7 +534,10 @@ const AdminDBOps: React.FC = () => {
             <select
               id="filterSelect"
               value={filter}
-              onChange={(e) => setFilter(e.target.value as FilterOption)}
+              onChange={(e) => {
+                setFilter(e.target.value as FilterOption);
+                setCurrentPage(1); // Reset to first page when filter changes
+              }}
               className="border border-gray-300 rounded-md px-2 py-1 text-sm"
             >
               <option value="all">All</option>
@@ -963,12 +973,7 @@ const AdminDBOps: React.FC = () => {
           document.body
         )
       )}
-
-      {/* Fixed Footer */}
-      <div className="fixed bottom-0 left-0 w-full">
-        <Footer />
-      </div>
-    </div>
+    </AdminLayout>
   );
 };
 

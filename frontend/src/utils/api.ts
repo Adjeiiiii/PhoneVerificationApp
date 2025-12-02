@@ -166,8 +166,8 @@ export const api = {
       ...options.headers,
     };
     
-    // Add JWT token for admin endpoints
-    if (endpoint.startsWith('/api/admin/')) {
+    // Add JWT token for admin endpoints (except login endpoint)
+    if (endpoint.startsWith('/api/admin/') && endpoint !== '/api/admin/login') {
       const token = localStorage.getItem('adminToken');
       if (token) {
         // Check if token is expired before making the request

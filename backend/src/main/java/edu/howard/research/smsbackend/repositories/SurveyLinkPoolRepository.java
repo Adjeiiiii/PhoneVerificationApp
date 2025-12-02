@@ -50,11 +50,11 @@ public interface SurveyLinkPoolRepository extends JpaRepository<SurveyLinkPool, 
     int markExhausted(@Param("id") UUID id);
 
     // Use native SQL here to avoid JPQL enum validation issues
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Modifying(clearAutomatically = true)
     @Query(
             value = """
             UPDATE survey_link_pool
-            SET status = 'ASSIGNED'
+            SET status = 'CLAIMED'
             WHERE id = :id
               AND status IN ('AVAILABLE','RESERVED','CLAIMED')
         """,

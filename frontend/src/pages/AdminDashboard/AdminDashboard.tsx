@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Footer from '../Footer/Footer';
-import Navbar from '../NavBar/Navbar';
-import AdminNavigation from '../../components/AdminNavigation';
+import AdminLayout from '../../components/AdminLayout';
 import { api } from '../../utils/api';
 
 interface Stats {
@@ -49,6 +47,7 @@ const AdminDashboard: React.FC = () => {
   const [selectedParticipantForLink, setSelectedParticipantForLink] = useState<any>(null);
   const [selectedLinkId, setSelectedLinkId] = useState<string>('');
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const [isAssigningLink, setIsAssigningLink] = useState(false);
 
 
   // For multiple select
@@ -60,8 +59,6 @@ const AdminDashboard: React.FC = () => {
 
   // Link override (removed - no longer used)
 
-  // Navbar dropdown
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // For custom delete modals
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -108,6 +105,25 @@ const AdminDashboard: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [bulkActionMessage]);
+
+  // Refresh available links when the link selection modal opens
+  useEffect(() => {
+    if (showLinkSelectionModal) {
+      api.get('/api/admin/links?status=AVAILABLE&page=0&size=100')
+        .then((data: any) => {
+          console.log('Refreshed available links data:', data);
+          if (data && data.content) {
+            setAvailableLinks(data.content);
+          } else {
+            setAvailableLinks([]);
+          }
+        })
+        .catch((err) => {
+          console.error('Available links refresh error:', err);
+          setAvailableLinks([]);
+        });
+    }
+  }, [showLinkSelectionModal]);
 
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
@@ -301,29 +317,6 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Navbar dropdown
-  const toggleUserDropdown = () => {
-    setShowUserDropdown(!showUserDropdown);
-  };
-
-  // Logout
-  const handleLogout = () => {
-    const token = localStorage.getItem('adminToken');
-    if (!token) {
-      localStorage.removeItem('adminToken');
-      navigate('/admin-login');
-      return;
-    }
-    api.post('/api/admin/logout', {}, { headers: { Authorization: `Bearer ${token}` } })
-      .then(() => {
-        localStorage.removeItem('adminToken');
-        navigate('/admin-login');
-      })
-      .catch(() => {
-        localStorage.removeItem('adminToken');
-        navigate('/admin-login');
-      });
-  };
 
   // Open edit modal
   const handleEdit = (rec: VerificationRecord) => {
@@ -603,7 +596,7 @@ const AdminDashboard: React.FC = () => {
         const isClickInsideMenu = target.closest('[role="menu"]');
         const isClickOnButton = target.closest('button[aria-label="Actions"]');
         if (!isClickInsideMenu && !isClickOnButton) {
-          setActiveActionMenu(null);
+        setActiveActionMenu(null);
         }
       }
     };
@@ -615,22 +608,12 @@ const AdminDashboard: React.FC = () => {
   console.log('AdminDashboard rendering, records:', records.length, 'stats:', stats);
   
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100">
-      <Navbar
+    <AdminLayout 
+      title="Dashboard" 
         searchQuery={searchQuery}
-        handleSearchChange={handleSearchChange}
-        handleLogout={handleLogout}
-        toggleUserDropdown={toggleUserDropdown}
-        showDropdown={showUserDropdown}
-        setShowDropdown={setShowUserDropdown}
-        newUsersCount={0}
-        markNotificationsAsSeen={() => {}}
-        leftContent={<AdminNavigation currentPage="dashboard" />}
-        passedUsersCount={0}
-        failedUsersCount={0}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden pt-16 pb-12">
-        <div className="container mx-auto px-4 py-4 flex-1 flex flex-col overflow-hidden">
+      onSearchChange={handleSearchChange}
+    >
+      <div className="container mx-auto px-6 py-6 flex-1 flex flex-col overflow-hidden">
           {/* Notification Banner */}
           {bulkActionMessage && (
             <div className={`mb-4 p-4 rounded-md flex-shrink-0 ${
@@ -760,9 +743,9 @@ const AdminDashboard: React.FC = () => {
             ) : (
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 overflow-auto">
-                <table className="w-full border-collapse text-sm">
+              <table className="w-full border-collapse text-sm">
                   <thead className="sticky top-0 bg-gray-200 z-10">
-                    <tr className="bg-gray-200 text-gray-700 text-left">
+                  <tr className="bg-gray-200 text-gray-700 text-left">
                     <th className="p-2 w-10">
                       <input
                         type="checkbox"
@@ -998,8 +981,8 @@ const AdminDashboard: React.FC = () => {
                     })
                   }
                 </tbody>
-                </table>
-              </div>
+              </table>
+            </div>
             </div>
             )}
 
@@ -1053,7 +1036,7 @@ const AdminDashboard: React.FC = () => {
 
           {/* Verified Without Links Tab */}
           {activeTab === 'waiting' && (
-          <div className="bg-white rounded-lg shadow overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="bg-white rounded-lg shadow overflow-hidden flex-1 flex flex-col min-h-0">
             <div className="p-6 flex-shrink-0">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -1063,13 +1046,13 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-sm text-gray-600 mt-1">
                     These participants have verified their phone numbers but did not receive survey links (no links were available at the time).
                   </p>
-                </div>
+        </div>
                 {verifiedWithoutInvitations.length > 0 && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
                     {verifiedWithoutInvitations.length} participant{verifiedWithoutInvitations.length !== 1 ? 's' : ''}
                   </span>
                 )}
-              </div>
+      </div>
             </div>
 
             {verifiedWithoutInvitations.length === 0 ? (
@@ -1140,7 +1123,7 @@ const AdminDashboard: React.FC = () => {
                               </button>
                               {activeActionMenu === participant.id && (
                                 <div 
-                                  className="fixed w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-[100]"
+                                  className="fixed w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-[100]"
                                   style={{
                                     top: `${menuPosition.top}px`,
                                     right: `${menuPosition.right}px`
@@ -1155,20 +1138,20 @@ const AdminDashboard: React.FC = () => {
                                         setShowLinkSelectionModal(true);
                                         setActiveActionMenu(null);
                                       }}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-blue-50"
+                                      className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 whitespace-nowrap"
                                       role="menuitem"
                                     >
-                                      <svg className="mr-3 h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="mr-3 h-4 w-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                       </svg>
-                                      Assign and Send Link
+                                      <span>Assign and Send Link</span>
                                     </button>
                                     <button
                                       onClick={async () => {
                                         setActiveActionMenu(null);
                                         if (window.confirm(`Are you sure you want to delete participant ${participant.phone}? This action cannot be undone.`)) {
                                           try {
-                                            const response = await api.deleteUser(participant.id);
+                                            await api.deleteUser(participant.id);
                                             setBulkActionMessage('Participant deleted successfully');
                                             fetchStatsAndRecords(); // Refresh both lists
                                           } catch (error: any) {
@@ -1176,13 +1159,13 @@ const AdminDashboard: React.FC = () => {
                                           }
                                         }
                                       }}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                                      className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 whitespace-nowrap"
                                       role="menuitem"
                                     >
-                                      <svg className="mr-3 h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="mr-3 h-4 w-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                       </svg>
-                                      Delete
+                                      <span>Delete</span>
                                     </button>
                                   </div>
                                 </div>
@@ -1197,11 +1180,7 @@ const AdminDashboard: React.FC = () => {
             )}
           </div>
           )}
-        </div>
       </div>
-
-      <Footer />
-
 
       {/* Modals */}
       {showEditModal && editRecord && (
@@ -1456,95 +1435,162 @@ const AdminDashboard: React.FC = () => {
       {/* Link Selection Modal */}
       {showLinkSelectionModal && selectedParticipantForLink && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                Assign and Send Survey Link
-              </h3>
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  <span className="font-medium">Participant:</span> {selectedParticipantForLink.phone}
-                </p>
-                {selectedParticipantForLink.email && (
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Email:</span> {selectedParticipantForLink.email}
-                  </p>
-                )}
-              </div>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select a Survey Link
-                </label>
-                <select
-                  value={selectedLinkId}
-                  onChange={(e) => setSelectedLinkId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select a link...</option>
-                  {availableLinks.map((link: any) => (
-                    <option key={link.id} value={link.id}>
-                      {link.shortLinkUrl || link.linkUrl?.substring(0, 60) || 'Link ' + link.id.substring(0, 8)}
-                      {link.batchLabel ? ` (${link.batchLabel})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {availableLinks.length === 0 && (
-                  <p className="text-sm text-gray-500 mt-2">No available links in the database.</p>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2">
+          <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden" style={{ borderRadius: '8px' }}>
+            {/* Header */}
+            <div className="bg-blue-600 px-6 py-4 relative" style={{ borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <h3 className="text-xl font-bold text-white">
+                    Assign and Send Survey Link
+                  </h3>
+    </div>
                 <button
                   onClick={() => {
                     setShowLinkSelectionModal(false);
                     setSelectedParticipantForLink(null);
                     setSelectedLinkId('');
+                    setIsAssigningLink(false);
                   }}
-                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  className="text-white hover:bg-blue-700 rounded-md p-1 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600"
+                  aria-label="Close modal"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {/* Participant Information */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Participant</p>
+                      <p className="text-sm font-semibold text-gray-900 mt-0.5">{selectedParticipantForLink.phone}</p>
+                    </div>
+                  </div>
+                  {selectedParticipantForLink.email && (
+                    <div className="flex items-center gap-3">
+                      <svg className="w-5 h-5 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</p>
+                        <p className="text-sm font-semibold text-gray-900 mt-0.5">{selectedParticipantForLink.email}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Link Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  Select Survey Link
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedLinkId}
+                    onChange={(e) => setSelectedLinkId(e.target.value)}
+                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-sm font-medium text-gray-700 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors appearance-none cursor-pointer hover:border-gray-400"
+                  >
+                    <option value="">Choose a survey link...</option>
+                    {availableLinks.map((link: any) => (
+                      <option key={link.id} value={link.id}>
+                        {link.shortLinkUrl || link.linkUrl?.substring(0, 60) || 'Link ' + link.id.substring(0, 8)}
+                        {link.batchLabel ? ` (${link.batchLabel})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                {availableLinks.length === 0 && (
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      No available links in the database.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowLinkSelectionModal(false);
+                    setSelectedParticipantForLink(null);
+                    setSelectedLinkId('');
+                    setIsAssigningLink(false);
+                  }}
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={async () => {
-                    if (!selectedLinkId) {
-                      setBulkActionMessage('Please select a link first');
+                    if (!selectedLinkId || isAssigningLink) {
+                      if (!selectedLinkId) {
+                        setBulkActionMessage('Please select a link first');
+                      }
                       return;
                     }
+                    setIsAssigningLink(true);
                     try {
                       const response = await api.post('/api/admin/invitations/send-with-link', {
                         phone: selectedParticipantForLink.phone,
                         linkId: selectedLinkId
                       });
-                      if (response.ok) {
+                      if (response && response.ok) {
                         setBulkActionMessage(`Survey link sent successfully to ${selectedParticipantForLink.phone}`);
+                        // Immediately remove the assigned link from available links
+                        setAvailableLinks(prevLinks => prevLinks.filter(link => link.id !== selectedLinkId));
                         setShowLinkSelectionModal(false);
                         setSelectedParticipantForLink(null);
                         setSelectedLinkId('');
                         fetchStatsAndRecords(); // Refresh to move them to main table
                         setActiveTab('invitations'); // Switch to invitations tab
                       } else {
-                        setBulkActionMessage(`Failed to send link: ${response.error || response.message}`);
+                        const errorMsg = response?.message || response?.error || 'Failed to send survey link';
+                        setBulkActionMessage(`Failed to send link: ${errorMsg}`);
                       }
                     } catch (error: any) {
-                      setBulkActionMessage(`Error: ${error.message || 'Failed to send survey link'}`);
+                      const errorMsg = error?.message || error?.response?.data?.message || error?.response?.data?.error || 'Failed to send survey link';
+                      setBulkActionMessage(`Error: ${errorMsg}`);
+                    } finally {
+                      setIsAssigningLink(false);
                     }
                   }}
-                  disabled={!selectedLinkId}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    selectedLinkId
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  disabled={!selectedLinkId || isAssigningLink}
+                  className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                    selectedLinkId && !isAssigningLink
+                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm hover:shadow-md focus:ring-blue-400'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  Assign and Send
+                  {isAssigningLink ? 'Assigning...' : 'Assign and Send'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </AdminLayout>
   );
 };
 
