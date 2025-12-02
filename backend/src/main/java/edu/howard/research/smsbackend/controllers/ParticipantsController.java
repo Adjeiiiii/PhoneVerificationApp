@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -115,6 +116,7 @@ public class ParticipantsController {
      * Requires phone number to be verified
      */
     @PostMapping("/resend-survey-link")
+    @Transactional(noRollbackFor = {IllegalArgumentException.class})
     public ResponseEntity<Map<String, Object>> resendSurveyLink(@Valid @RequestBody SendSmsRequest request) {
         try {
             String phone = phoneNumberService.normalizeToE164(request.getPhone());
@@ -180,9 +182,10 @@ public class ParticipantsController {
                         invitation.setQueuedAt(java.time.OffsetDateTime.now());
                         invitationRepository.save(invitation);
                         
+                        // Return the link that was actually sent (short link if available)
                         return ResponseEntity.ok(Map.of(
                             "ok", true,
-                            "linkUrl", invitation.getLinkUrl(),
+                            "linkUrl", linkToSend,
                             "message", isReminder ? "Reminder sent successfully!" : "Survey link sent successfully!"
                         ));
                     } else {
@@ -225,12 +228,17 @@ public class ParticipantsController {
                     ));
                 }
             }
-        } catch (Exception e) {
-            log.error("Error in resend survey link: {}", e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid request in resend survey link: {}", e.getMessage());
             return ResponseEntity.ok(Map.of(
                 "ok", false,
-                "error", "Error: " + e.getMessage()
+                "error", e.getMessage()
             ));
+        } catch (Exception e) {
+            log.error("Error in resend survey link: {}", e.getMessage(), e);
+            // Re-throw to let transaction rollback properly
+            // The global exception handler will catch it and return proper error response
+            throw new RuntimeException("Failed to resend survey link: " + e.getMessage(), e);
         }
     }
 }

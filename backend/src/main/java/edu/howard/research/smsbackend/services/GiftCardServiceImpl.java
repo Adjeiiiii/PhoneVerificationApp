@@ -480,6 +480,12 @@ public class GiftCardServiceImpl implements GiftCardService {
             throw new IllegalStateException("Gift card is already unsent.");
         }
 
+        // Capture participant info BEFORE any modifications (in case participant gets deleted)
+        Participant participant = giftCard.getParticipant();
+        String participantPhone = participant != null ? participant.getPhone() : "Unknown";
+        String participantEmail = participant != null ? participant.getEmail() : null;
+        String participantName = participant != null ? participant.getName() : null;
+
         // If gift card was from pool, mark pool card as available again
         if (giftCard.getPoolId() != null) {
             giftCardPoolRepository.findById(giftCard.getPoolId()).ifPresent(poolCard -> {
@@ -490,18 +496,18 @@ public class GiftCardServiceImpl implements GiftCardService {
             });
         }
 
-        // Log the UNSENT action with details
+        // Log the UNSENT action with details (using captured participant info)
         Map<String, Object> details = new HashMap<>();
         details.put("card_code", giftCard.getCardCode());
         details.put("card_type", giftCard.getCardType());
         details.put("card_value", giftCard.getCardValue());
         details.put("previous_status", giftCard.getStatus());
-        details.put("participant_phone", giftCard.getParticipant().getPhone());
-        if (giftCard.getParticipant().getEmail() != null) {
-            details.put("participant_email", giftCard.getParticipant().getEmail());
+        details.put("participant_phone", participantPhone);
+        if (participantEmail != null) {
+            details.put("participant_email", participantEmail);
         }
-        if (giftCard.getParticipant().getName() != null) {
-            details.put("participant_name", giftCard.getParticipant().getName());
+        if (participantName != null) {
+            details.put("participant_name", participantName);
         }
         if (giftCard.getPoolId() != null) {
             details.put("pool_id", giftCard.getPoolId().toString());
@@ -517,6 +523,8 @@ public class GiftCardServiceImpl implements GiftCardService {
         logDistributionAction(giftCardId, DistributionAction.UNSENT, adminUsername, details);
 
         // Mark the gift card as UNSENT instead of deleting it
+        // IMPORTANT: Do NOT set participant or invitation to null - keep the references
+        // The database requires participant_id and invitation_id to be NOT NULL
         giftCard.setStatus(GiftCardStatus.UNSENT);
         giftCardRepository.save(giftCard);
         

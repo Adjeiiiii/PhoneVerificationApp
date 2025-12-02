@@ -107,14 +107,16 @@ public class SurveyServiceImpl implements SurveyService {
                         status,
                         OffsetDateTime.now()
                 );
-                return new AssignResult(true, null, linkUrl, sid);
+                // Return the link that was actually sent (short link if available)
+                return new AssignResult(true, null, linkToSend, sid);
             } else {
                 String error = (String) send.get("error");
                 inv.setMessageStatus("failed");
                 inv.setErrorCode(error);
                 inv.setFailedAt(OffsetDateTime.now());
                 invitationRepository.save(inv);
-                return new AssignResult(false, "sms_send_failed", linkUrl, null);
+                // Return the link that was actually sent (short link if available)
+                return new AssignResult(false, "sms_send_failed", linkToSend, null);
             }
         } catch (Exception ex) {
             log.error("assignAndSendLink error: {}", ex.getMessage(), ex);

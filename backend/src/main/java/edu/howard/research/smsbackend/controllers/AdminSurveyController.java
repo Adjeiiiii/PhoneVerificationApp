@@ -480,7 +480,7 @@ public class AdminSurveyController {
                     "participantId", inv.getParticipant().getId(),
                     "status", "queued",
                     "messageSid", sid,
-                    "linkUrl", inv.getLinkUrl()
+                    "linkUrl", linkToSend
             );
         } else {
             // Keep the invitation; report send failure
@@ -490,7 +490,7 @@ public class AdminSurveyController {
                     "participantId", inv.getParticipant().getId(),
                     "status", inv.getMessageStatus(),
                     "error", String.valueOf(send.get("error")),
-                    "linkUrl", inv.getLinkUrl()
+                    "linkUrl", linkToSend
             );
         }
     }
@@ -560,7 +560,7 @@ public class AdminSurveyController {
                     "participantId", inv.getParticipant().getId(),
                     "status", "queued",
                     "messageSid", sid,
-                    "linkUrl", inv.getLinkUrl()
+                    "linkUrl", linkToSend
             );
         } else {
             // Keep the invitation; report send failure
@@ -570,7 +570,7 @@ public class AdminSurveyController {
                     "participantId", inv.getParticipant().getId(),
                     "status", inv.getMessageStatus(),
                     "error", String.valueOf(send.get("error")),
-                    "linkUrl", inv.getLinkUrl()
+                    "linkUrl", linkToSend
             );
         }
     }
@@ -838,10 +838,57 @@ public class AdminSurveyController {
         }
 
         try {
-            // Find the invitation by ID
+            // First, try to find as a participant (for "Verified Without Links" section)
+            Optional<Participant> participantOpt = participantRepo.findById(id);
+            if (participantOpt.isPresent()) {
+                Participant participant = participantOpt.get();
+                
+                // Check if participant has any invitations
+                long invitationCount = inviteRepo.countByParticipantId(participant.getId());
+                if (invitationCount > 0) {
+                    return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Cannot delete participant as they have associated invitations. Please delete all invitations for this participant first."));
+                }
+                
+                // Check for gift cards
+                List<GiftCard> giftCards = giftCardRepo.findByParticipantId(participant.getId());
+                int giftCardCount = giftCards.size();
+                
+                // Unsend gift cards if any
+                for (GiftCard giftCard : giftCards) {
+                    if (giftCard.getStatus() != GiftCardStatus.UNSENT) {
+                        giftCardService.unsendGiftCard(giftCard.getId(), "SYSTEM_DELETE");
+                    }
+                }
+                
+                // Clear foreign key references
+                for (GiftCard giftCard : giftCards) {
+                    giftCard.setInvitation(null);
+                    giftCard.setParticipant(null);
+                    giftCardRepo.save(giftCard);
+                }
+                
+                // Delete the participant
+                participantRepo.delete(participant);
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Participant deleted successfully");
+                response.put("deletedId", id);
+                
+                if (giftCardCount > 0) {
+                    response.put("giftCardsDeleted", giftCardCount);
+                    response.put("giftCardsAvailable", "The gift cards have been made available again and will appear in the unsent history.");
+                }
+                
+                return ResponseEntity.ok(response);
+            }
+            
+            // If not a participant, try to find as an invitation (for "All Invitations" section)
             Optional<SurveyInvitation> invitationOpt = inviteRepo.findById(id);
             if (invitationOpt.isEmpty()) {
-                return ResponseEntity.notFound().build();
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Resource not found: No participant or invitation found with the given ID"));
             }
 
             SurveyInvitation invitation = invitationOpt.get();
@@ -870,17 +917,26 @@ public class AdminSurveyController {
             // They are not deleted so they appear in the unsent history
             
             // Clear foreign key references before deleting invitation and participant
+            // This is now allowed because participant_id and invitation_id are nullable
             for (GiftCard giftCard : giftCards) {
                 giftCard.setInvitation(null);
                 giftCard.setParticipant(null);
                 giftCardRepo.save(giftCard);
             }
 
+            // Check if participant has other invitations before deleting
+            // Count all invitations for this participant (including the one we're about to delete)
+            long totalInvitationCount = inviteRepo.findAll().stream()
+                .filter(inv -> inv.getParticipant().getId().equals(participant.getId()))
+                .count();
+            
             // Delete the invitation
             inviteRepo.delete(invitation);
             
-            // Then delete the participant
-            participantRepo.delete(participant);
+            // Only delete participant if this was their only invitation
+            if (totalInvitationCount <= 1) {
+                participantRepo.delete(participant);
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -894,9 +950,15 @@ public class AdminSurveyController {
 
             return ResponseEntity.ok(response);
 
-        } catch (Exception e) {
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.error("Data integrity violation while deleting user {}: {}", id, e.getMessage(), e);
             return ResponseEntity.badRequest()
-                .body(Map.of("error", "Failed to delete user: " + e.getMessage()));
+                .body(Map.of("error", "Cannot delete user: There are still references to this user in the system. " + 
+                    (e.getMessage() != null ? e.getMessage() : "Please check for associated records.")));
+        } catch (Exception e) {
+            log.error("Error deleting user {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Failed to delete user: " + (e.getMessage() != null ? e.getMessage() : "Unknown error occurred")));
         }
     }
 

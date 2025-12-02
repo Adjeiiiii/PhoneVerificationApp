@@ -62,4 +62,9 @@ public interface SurveyInvitationRepository extends JpaRepository<SurveyInvitati
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE SurveyInvitation i SET i.messageStatus = 'completed', i.completedAt = :ts WHERE i.id = :id")
     int markCompletedById(@Param("id") UUID id, @Param("ts") OffsetDateTime ts);
+
+    /**
+     * Count invitations by participant ID
+     */
+    long countByParticipantId(UUID participantId);
 }

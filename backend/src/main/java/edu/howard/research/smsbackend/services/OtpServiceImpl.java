@@ -68,67 +68,68 @@ public class OtpServiceImpl implements OtpService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = {ApiException.class})
     public Map<String, Object> check(OtpCheckRequest req) {
+        VerificationCheck check;
         try {
-            VerificationCheck check = VerificationCheck.creator(verifyServiceSid)
+            check = VerificationCheck.creator(verifyServiceSid)
                     .setTo(req.getPhone())
                     .setCode(req.getCode())
                     .create();
-
-            boolean approved = "approved".equalsIgnoreCase(check.getStatus());
-            if (!approved) {
-                return Map.of(
-                        "verified", false,
-                        "status", check.getStatus(),
-                        "message", "Invalid or expired code."
-                );
-            }
-
-            // Find or create participant
-            Participant participant = participantRepo.findByPhone(req.getPhone()).orElseGet(() -> {
-                log.info("Creating new participant for verified phone: {}", req.getPhone());
-                Participant newParticipant = new Participant();
-                newParticipant.setPhone(req.getPhone());
-                newParticipant.setStatus(ParticipantStatus.SUBSCRIBED);
-                newParticipant.setPhoneVerified(true);
-                newParticipant.setVerifiedAt(OffsetDateTime.now());
-                return participantRepo.save(newParticipant);
-            });
-            
-            // Update participant with email and name if provided
-            boolean updated = false;
-            if (req.getEmail() != null && !req.getEmail().trim().isEmpty()) {
-                participant.setEmail(req.getEmail().trim());
-                updated = true;
-            }
-            if (req.getName() != null && !req.getName().trim().isEmpty()) {
-                participant.setName(req.getName().trim());
-                updated = true;
-            }
-            
-            // Update verification status if not already verified
-            if (!participant.isPhoneVerified()) {
-                participant.setPhoneVerified(true);
-                participant.setVerifiedAt(OffsetDateTime.now());
-                updated = true;
-            }
-            
-            if (updated) {
-                participantRepo.save(participant);
-                log.info("Updated participant {} with email: {}, name: {}", 
-                        req.getPhone(), req.getEmail(), req.getName());
-            }
-
-            Map<String, Object> resp = new HashMap<>();
-            resp.put("verified", true);
-            resp.put("status", check.getStatus());
-            resp.put("sid", check.getSid());
-            return resp;
-
         } catch (ApiException e) {
             log.warn("Verify check failed: code={} msg={}", e.getCode(), e.getMessage());
             return Map.of("verified", false, "error", e.getMessage());
         }
+
+        boolean approved = "approved".equalsIgnoreCase(check.getStatus());
+        if (!approved) {
+            return Map.of(
+                    "verified", false,
+                    "status", check.getStatus(),
+                    "message", "Invalid or expired code."
+            );
+        }
+
+        // Find or create participant
+        // This can throw database exceptions - let them propagate to trigger rollback
+        Participant participant = participantRepo.findByPhone(req.getPhone()).orElseGet(() -> {
+            log.info("Creating new participant for verified phone: {}", req.getPhone());
+            Participant newParticipant = new Participant();
+            newParticipant.setPhone(req.getPhone());
+            newParticipant.setStatus(ParticipantStatus.SUBSCRIBED);
+            newParticipant.setPhoneVerified(true);
+            newParticipant.setVerifiedAt(OffsetDateTime.now());
+            return participantRepo.save(newParticipant);
+        });
+        
+        // Update participant with email and name if provided
+        boolean updated = false;
+        if (req.getEmail() != null && !req.getEmail().trim().isEmpty()) {
+            participant.setEmail(req.getEmail().trim());
+            updated = true;
+        }
+        if (req.getName() != null && !req.getName().trim().isEmpty()) {
+            participant.setName(req.getName().trim());
+            updated = true;
+        }
+        
+        // Update verification status if not already verified
+        if (!participant.isPhoneVerified()) {
+            participant.setPhoneVerified(true);
+            participant.setVerifiedAt(OffsetDateTime.now());
+            updated = true;
+        }
+        
+        if (updated) {
+            participantRepo.save(participant);
+            log.info("Updated participant {} with email: {}, name: {}", 
+                    req.getPhone(), req.getEmail(), req.getName());
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("verified", true);
+        resp.put("status", check.getStatus());
+        resp.put("sid", check.getSid());
+        return resp;
     }
 }

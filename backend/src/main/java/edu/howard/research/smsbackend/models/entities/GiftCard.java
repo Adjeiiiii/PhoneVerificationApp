@@ -29,11 +29,11 @@ public class GiftCard {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "participant_id", nullable = false)
+    @JoinColumn(name = "participant_id", nullable = true)
     private Participant participant;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "invitation_id", nullable = false)
+    @JoinColumn(name = "invitation_id", nullable = true)
     private SurveyInvitation invitation;
 
     @Column(name = "card_code", nullable = false, length = 100)

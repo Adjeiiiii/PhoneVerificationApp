@@ -575,14 +575,23 @@ const AdminDashboard: React.FC = () => {
         
         // Show success message with gift card info if applicable
         let message = 'User deleted successfully';
-        if (response.giftCardsDeleted && response.giftCardsDeleted > 0) {
+        if (response && response.giftCardsDeleted && response.giftCardsDeleted > 0) {
           message += `. ${response.giftCardsDeleted} gift card(s) have been made available again and will appear in the unsent history.`;
         }
         setBulkActionMessage(message);
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.error('Delete error:', err);
-        setBulkActionMessage('Failed to delete user');
+        console.error('Error details:', {
+          message: err.message,
+          status: err.status,
+          stack: err.stack
+        });
+        // Show the actual error message from the backend
+        const errorMessage = err.message || 'Failed to delete user. Please try again.';
+        setBulkActionMessage(errorMessage);
+        // Keep modal open so user can see the error
+        // Don't close the modal on error
       });
   };
 
