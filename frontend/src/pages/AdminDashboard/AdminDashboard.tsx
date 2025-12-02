@@ -958,8 +958,8 @@ const AdminDashboard: React.FC = () => {
                                       <button
                                         onClick={() => {
                                           navigator.clipboard.writeText(r.short_link!);
-                                          setActionMessage('Short link copied to clipboard!');
-                                          setTimeout(() => setActionMessage(''), 3000);
+                                          setBulkActionMessage('Short link copied to clipboard!');
+                                          setTimeout(() => setBulkActionMessage(''), 3000);
                                           setActiveActionMenu(null);
                                         }}
                                         className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -975,8 +975,8 @@ const AdminDashboard: React.FC = () => {
                                       <button
                                         onClick={() => {
                                           navigator.clipboard.writeText(r.assigned_link!);
-                                          setActionMessage('Long link copied to clipboard!');
-                                          setTimeout(() => setActionMessage(''), 3000);
+                                          setBulkActionMessage('Long link copied to clipboard!');
+                                          setTimeout(() => setBulkActionMessage(''), 3000);
                                           setActiveActionMenu(null);
                                         }}
                                         className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"

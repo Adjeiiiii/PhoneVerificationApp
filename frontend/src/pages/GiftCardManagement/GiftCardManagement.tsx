@@ -93,6 +93,9 @@ const GiftCardManagement: React.FC = () => {
   // Eligible participants
   const [eligibleParticipants, setEligibleParticipants] = useState<EligibleParticipant[]>([]);
   
+  // Bulk selection for eligible participants
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
+  
   // Sent gift cards
   const [sentGiftCards, setSentGiftCards] = useState<GiftCard[]>([]);
   
@@ -103,6 +106,7 @@ const GiftCardManagement: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showBulkSendModal, setShowBulkSendModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [confirmationText, setConfirmationText] = useState('');
   
@@ -186,6 +190,9 @@ const GiftCardManagement: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
+    // Clear selection when switching tabs
+    setSelectedParticipantIds([]);
+    
     if (activeTab === 'pool') {
       fetchPoolData();
     } else if (activeTab === 'eligible') {
@@ -309,9 +316,18 @@ const GiftCardManagement: React.FC = () => {
     setLoading(true);
     try {
       const result = await api.uploadGiftCards(uploadData.file, uploadData.batchLabel);
+      let messageText = `Upload completed! ${result.successfulUploads} cards added`;
+      if (result.failedUploads > 0) {
+        messageText += `, ${result.failedUploads} failed`;
+        if (result.errors && result.errors.length > 0) {
+          // Show first 3 errors as examples
+          const errorPreview = result.errors.slice(0, 3).join('; ');
+          messageText += `. Errors: ${errorPreview}${result.errors.length > 3 ? '...' : ''}`;
+        }
+      }
       setMessage({ 
-        type: 'success', 
-        text: `Upload completed! ${result.successfulUploads} cards added, ${result.failedUploads} failed` 
+        type: result.failedUploads > 0 ? 'error' : 'success', 
+        text: messageText
       });
       setShowUploadModal(false);
       setUploadData({ file: null, batchLabel: '' });
@@ -319,6 +335,142 @@ const GiftCardManagement: React.FC = () => {
       await fetchPoolData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to upload gift cards' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Bulk selection functions
+  const toggleSelectParticipant = (participantId: string) => {
+    if (selectedParticipantIds.includes(participantId)) {
+      setSelectedParticipantIds(selectedParticipantIds.filter((id) => id !== participantId));
+    } else {
+      setSelectedParticipantIds([...selectedParticipantIds, participantId]);
+    }
+  };
+
+  const toggleSelectAllParticipants = () => {
+    const allSelected = eligibleParticipants.every((p) =>
+      selectedParticipantIds.includes(p.participantId)
+    );
+    if (allSelected) {
+      setSelectedParticipantIds([]);
+    } else {
+      setSelectedParticipantIds(eligibleParticipants.map((p) => p.participantId));
+    }
+  };
+
+  const handleBulkSendClick = () => {
+    if (selectedParticipantIds.length === 0) {
+      setMessage({ type: 'error', text: 'Please select at least one participant' });
+      return;
+    }
+    setShowBulkSendModal(true);
+  };
+
+  const handleBulkSendGiftCards = async (cardType: string, cardValue: number, deliveryMethod: string) => {
+    if (selectedParticipantIds.length === 0) {
+      setMessage({ type: 'error', text: 'No participants selected' });
+      return;
+    }
+
+    // Check if we have enough cards in the pool
+    const availableCards = poolStatus?.availableCards || 0;
+    if (availableCards < selectedParticipantIds.length) {
+      setMessage({ 
+        type: 'error', 
+        text: `Insufficient gift cards. You need ${selectedParticipantIds.length} cards but only ${availableCards} are available. Please add more cards or reduce your selection.` 
+      });
+      setShowBulkSendModal(false);
+      return;
+    }
+
+    setLoading(true);
+    setShowBulkSendModal(false);
+    
+    const results: { success: number; failed: number; errors: string[] } = {
+      success: 0,
+      failed: 0,
+      errors: []
+    };
+
+    try {
+      // Get available cards from pool
+      const poolResponse = await api.getAvailableGiftCards(0, selectedParticipantIds.length);
+      const availablePoolCards = poolResponse.content || [];
+
+      if (availablePoolCards.length < selectedParticipantIds.length) {
+        setMessage({ 
+          type: 'error', 
+          text: `Insufficient gift cards. Only ${availablePoolCards.length} cards available. Please add more cards or reduce your selection.` 
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Send gift cards to each selected participant
+      for (let i = 0; i < selectedParticipantIds.length; i++) {
+        const participantId = selectedParticipantIds[i];
+        const participant = eligibleParticipants.find((p) => p.participantId === participantId);
+        
+        if (!participant) {
+          results.failed++;
+          results.errors.push(`Participant ${participantId} not found`);
+          continue;
+        }
+
+        const poolCard = availablePoolCards[i];
+        if (!poolCard) {
+          results.failed++;
+          results.errors.push(`No gift card available for ${participant.participantPhone}`);
+          continue;
+        }
+
+        try {
+          const sendData = {
+            participantId: participant.participantId,
+            invitationId: participant.invitationId,
+            cardType: poolCard.cardType,
+            cardValue: poolCard.cardValue,
+            cardCode: poolCard.cardCode,
+            redemptionUrl: poolCard.redemptionUrl,
+            redemptionInstructions: poolCard.redemptionInstructions || '',
+            expiresAt: poolCard.expiresAt || '',
+            notes: '',
+            deliveryMethod: deliveryMethod,
+            source: 'POOL',
+            poolId: poolCard.id
+          };
+
+          await api.sendGiftCard(participant.participantId, sendData);
+          results.success++;
+        } catch (error: any) {
+          results.failed++;
+          results.errors.push(`${participant.participantPhone}: ${error.message || 'Failed to send'}`);
+        }
+      }
+
+      // Show results
+      if (results.failed === 0) {
+        setMessage({ 
+          type: 'success', 
+          text: `Successfully sent ${results.success} gift card${results.success !== 1 ? 's' : ''}!` 
+        });
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: `Sent ${results.success} gift card${results.success !== 1 ? 's' : ''}, ${results.failed} failed. ${results.errors.slice(0, 3).join('; ')}${results.errors.length > 3 ? '...' : ''}` 
+        });
+      }
+
+      // Clear selection and refresh data
+      setSelectedParticipantIds([]);
+      await fetchPoolStatus();
+      await fetchEligibleParticipants();
+      await fetchSentGiftCards();
+      await fetchPoolData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to send gift cards' });
     } finally {
       setLoading(false);
     }
@@ -365,6 +517,7 @@ const GiftCardManagement: React.FC = () => {
       });
       
       // Refresh the data
+      await fetchPoolStatus(); // Refresh stats/numbers
       await fetchEligibleParticipants();
       await fetchSentGiftCards();
       await fetchPoolData(); // Also refresh pool data since card status will change
@@ -463,6 +616,7 @@ const GiftCardManagement: React.FC = () => {
       setConfirmationText('');
       
       // Refresh the data
+      await fetchPoolStatus(); // Refresh stats/numbers
       await fetchSentGiftCards();
       await fetchUnsentGiftCards();
     } catch (error: any) {
@@ -486,7 +640,7 @@ const GiftCardManagement: React.FC = () => {
 
   return (
     <AdminLayout title="Gift Card Management" searchQuery={searchQuery} onSearchChange={handleSearchChange}>
-      <div className="container mx-auto px-6 py-6">
+      <div className="container mx-auto px-6 py-6 flex-1 flex flex-col overflow-hidden min-h-0">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Gift Card Management</h1>
           <p className="mt-2 text-gray-600">Manage gift card distribution for research participants</p>
@@ -515,8 +669,8 @@ const GiftCardManagement: React.FC = () => {
         )}
 
         {/* Tabs */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="border-b border-gray-200">
+        <div className="bg-white rounded-lg shadow flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="border-b border-gray-200 flex-shrink-0">
             <nav className="-mb-px flex space-x-8 px-6">
               <button
                 onClick={() => setActiveTab('pool')}
@@ -561,7 +715,7 @@ const GiftCardManagement: React.FC = () => {
             </nav>
           </div>
 
-          <div className="p-6">
+          <div className="p-6 flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Modern Slide-Down Notification */}
             {message && (
               <div className="fixed top-0 left-0 right-0 z-[70] transform transition-transform duration-300 ease-out">
@@ -617,311 +771,412 @@ const GiftCardManagement: React.FC = () => {
 
             {/* Gift Card Pool Tab */}
             {activeTab === 'pool' && (
-              <div>
-                <div className="flex justify-between items-center mb-6">
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex justify-between items-center mb-6 flex-shrink-0">
                   <h2 className="text-xl font-semibold text-gray-900">Gift Card Pool</h2>
-                  <div className="space-x-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       onClick={() => setShowAddModal(true)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all flex items-center"
                     >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
                       Add Gift Card
                     </button>
                     <button
                       onClick={() => setShowUploadModal(true)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                      className="px-5 py-2.5 bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all flex items-center"
                     >
+                      <svg className="w-4 h-4 mr-2 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
                       Upload CSV
                     </button>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Card Code
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Type
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Value
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Redemption URL
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Batch
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Notes
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Expires
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {poolCards.map((card) => (
-                        <tr key={card.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {card.cardCode}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {card.cardType}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatCurrency(card.cardValue)}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
-                            <a 
-                              href={card.redemptionUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 hover:underline truncate block"
-                              title={card.redemptionUrl}
-                            >
-                              {card.redemptionUrl.length > 40 
-                                ? `${card.redemptionUrl.substring(0, 40)}...` 
-                                : card.redemptionUrl
-                              }
-                            </a>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {card.batchLabel}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
-                            <div 
-                              className="truncate"
-                              title={card.notes || 'No notes'}
-                            >
-                              {card.notes || (
-                                <span className="text-gray-400 italic">No notes</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              card.status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
-                              card.status === 'ASSIGNED' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {card.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {card.expiresAt ? formatDate(card.expiresAt) : 'Never'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button
-                              onClick={() => {
-                                setSelectedItem(card);
-                                setShowDeleteModal(true);
-                              }}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {poolCards.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      <h3 className="mt-4 text-lg font-medium text-gray-900">No gift cards</h3>
+                      <p className="mt-2 text-sm text-gray-500">
+                        Get started by adding a gift card or uploading a CSV file.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Card Code
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Type
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Value
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Redemption URL
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Batch
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Notes
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Expires
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {poolCards.map((card) => (
+                            <tr key={card.id} className="hover:bg-gray-50 transition">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {card.cardCode}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {card.cardType}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {formatCurrency(card.cardValue)}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                                <a 
+                                  href={card.redemptionUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 hover:underline truncate block"
+                                  title={card.redemptionUrl}
+                                >
+                                  {card.redemptionUrl.length > 40 
+                                    ? `${card.redemptionUrl.substring(0, 40)}...` 
+                                    : card.redemptionUrl
+                                  }
+                                </a>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {card.batchLabel}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                                <div 
+                                  className="truncate"
+                                  title={card.notes || 'No notes'}
+                                >
+                                  {card.notes || (
+                                    <span className="text-gray-400 italic">No notes</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  card.status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
+                                  card.status === 'ASSIGNED' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
+                                }`}>
+                                  {card.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {card.expiresAt ? formatDate(card.expiresAt) : 'Never'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button
+                                  onClick={() => {
+                                    setSelectedItem(card);
+                                    setShowDeleteModal(true);
+                                  }}
+                                  className="text-red-600 hover:text-red-900 font-medium"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Eligible Participants Tab */}
             {activeTab === 'eligible' && (
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Eligible Participants</h2>
-                  <p className="text-sm text-gray-600">
-                    Participants who completed surveys and are eligible for gift cards
-                  </p>
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Eligible Participants</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Participants who completed surveys and are eligible for gift cards
+                    </p>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Phone
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Email
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Survey Completed
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {eligibleParticipants.map((participant) => (
-                        <tr key={participant.participantId}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {participant.participantPhone}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {participant.participantEmail || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(participant.surveyCompletedAt)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button
-                              onClick={() => {
-                                setSendData({
-                                  ...sendData,
-                                  participantId: participant.participantId,
-                                  invitationId: participant.invitationId
-                                });
-                                setShowSendModal(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-900"
-                            >
-                              Send Gift Card
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {eligibleParticipants.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <h3 className="mt-4 text-lg font-medium text-gray-900">No eligible participants</h3>
+                      <p className="mt-2 text-sm text-gray-500">
+                        Participants who complete surveys will appear here.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    {/* Bulk Action Bar */}
+                    {selectedParticipantIds.length > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between flex-shrink-0">
+                        <div className="flex items-center space-x-3">
+                          <span className="text-sm font-medium text-blue-900">
+                            {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''} selected
+                          </span>
+                        </div>
+                        <button
+                          onClick={handleBulkSendClick}
+                          disabled={loading}
+                          className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors shadow-sm hover:shadow-md flex items-center space-x-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                          </svg>
+                          <span>Send Gift Cards</span>
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-y-auto overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                              <input
+                                type="checkbox"
+                                checked={eligibleParticipants.length > 0 && eligibleParticipants.every((p) => selectedParticipantIds.includes(p.participantId))}
+                                onChange={toggleSelectAllParticipants}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              />
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Phone
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Email
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Survey Completed
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {eligibleParticipants.map((participant) => (
+                            <tr key={participant.participantId} className="hover:bg-gray-50 transition">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedParticipantIds.includes(participant.participantId)}
+                                  onChange={() => toggleSelectParticipant(participant.participantId)}
+                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {participant.participantPhone}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {participant.participantEmail || 'N/A'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {formatDate(participant.surveyCompletedAt)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button
+                                  onClick={() => {
+                                    setSendData({
+                                      ...sendData,
+                                      participantId: participant.participantId,
+                                      invitationId: participant.invitationId
+                                    });
+                                    setShowSendModal(true);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-900 font-medium"
+                                >
+                                  Send Gift Card
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Sent Gift Cards Tab */}
             {activeTab === 'sent' && (
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Sent Gift Cards</h2>
-                  <p className="text-sm text-gray-600">
-                    Gift cards that have been sent to participants
-                  </p>
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Sent Gift Cards</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Gift cards that have been sent to participants
+                    </p>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Participant
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Gift Card
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Value
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Sent Date
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {sentGiftCards.map((card) => (
-                        <tr key={card.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {card.participantPhone}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {card.cardCode}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatCurrency(card.cardValue)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              card.status === 'SENT' ? 'bg-blue-100 text-blue-800' :
-                              card.status === 'DELIVERED' ? 'bg-green-100 text-green-800' :
-                              card.status === 'REDEEMED' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {card.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {card.sentAt ? formatDate(card.sentAt) : 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                            <button
-                              onClick={() => {
-                                setSelectedItem(card);
-                                setConfirmationText('');
-                                setShowDeleteModal(true);
-                              }}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Unsend
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {sentGiftCards.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <h3 className="mt-4 text-lg font-medium text-gray-900">No sent gift cards</h3>
+                      <p className="mt-2 text-sm text-gray-500">
+                        Gift cards that have been sent to participants will appear here.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Participant
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Gift Card
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Value
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Sent Date
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {sentGiftCards.map((card) => (
+                            <tr key={card.id} className="hover:bg-gray-50 transition">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {card.participantPhone}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {card.cardCode}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {formatCurrency(card.cardValue)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  card.status === 'SENT' ? 'bg-blue-100 text-blue-800' :
+                                  card.status === 'DELIVERED' ? 'bg-green-100 text-green-800' :
+                                  card.status === 'REDEEMED' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {card.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {card.sentAt ? formatDate(card.sentAt) : 'N/A'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedItem(card);
+                                    setConfirmationText('');
+                                    setShowDeleteModal(true);
+                                  }}
+                                  className="text-red-600 hover:text-red-900 font-medium"
+                                >
+                                  Unsend
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Unsent Gift Cards Tab */}
             {activeTab === 'unsent' && (
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Unsent Gift Cards History</h2>
-                  <p className="text-sm text-gray-600">
-                    Gift cards that were sent to participants but then revoked/unsent by admins
-                  </p>
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Unsent Gift Cards History</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Gift cards that were sent to participants but then revoked/unsent by admins
+                    </p>
+                  </div>
                 </div>
 
                 {unsentGiftCards.length === 0 ? (
-                  <div className="text-center py-12">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                    </svg>
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No unsent gift cards</h3>
-                    <p className="mt-1 text-sm text-gray-500">No gift cards have been unsent yet.</p>
+                  <div className="flex-1 flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <h3 className="mt-4 text-lg font-medium text-gray-900">No unsent gift cards</h3>
+                      <p className="mt-2 text-sm text-gray-500">
+                        Gift cards that have been unsent will appear here.
+                      </p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Card Code
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Value
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Participant
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Originally Sent By
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Originally Sent At
-                          </th>
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Card Code
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Type
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Value
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Participant
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Originally Sent By
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Originally Sent At
+                            </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Unsent By
                           </th>
@@ -930,9 +1185,9 @@ const GiftCardManagement: React.FC = () => {
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {unsentGiftCards.map((card, index) => (
-                          <tr key={index}>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {unsentGiftCards.map((card, index) => (
+                            <tr key={index} className="hover:bg-gray-50 transition">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                               {card.cardCode}
                             </td>
@@ -966,9 +1221,10 @@ const GiftCardManagement: React.FC = () => {
                               {card.unsentAt ? formatDate(card.unsentAt) : 'N/A'}
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1306,13 +1562,16 @@ const GiftCardManagement: React.FC = () => {
                     <div className="flex-1">
                       <h4 className="text-sm font-medium text-blue-900 mb-2">CSV Format Required</h4>
                       <p className="text-xs text-blue-700 mb-2">Your CSV file should have these columns:</p>
-                      <div className="bg-white border border-blue-200 rounded p-2">
+                      <div className="bg-white border border-blue-200 rounded p-2 mb-2">
                         <code className="text-xs text-gray-800 font-mono">
-                          card_code, card_type, card_value, redemption_url, expires_at, notes
+                          card_code, card_type, card_value, redemption_url, expires_day, expires_month, expires_year
                         </code>
                       </div>
-                      <p className="text-xs text-blue-600 mt-2">
-                        <strong>Note:</strong> card_code, card_type, card_value, and redemption_url are required.
+                      <p className="text-xs text-blue-600 mb-1">
+                        <strong>Required:</strong> card_code, card_type, card_value, redemption_url
+                      </p>
+                      <p className="text-xs text-blue-600">
+                        <strong>Optional:</strong> expires_day (1-31), expires_month (1-12), expires_year (e.g., 2026)
                       </p>
                     </div>
                   </div>
@@ -1572,11 +1831,115 @@ const GiftCardManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Bulk Send Gift Cards Modal */}
+      {showBulkSendModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-5">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Send Gift Cards to Multiple Participants</h3>
+                  <p className="text-sm text-gray-600 mb-3">
+                    You are about to send gift cards to {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''}.
+                  </p>
+                  
+                  {/* Card Availability Check */}
+                  {poolStatus && (
+                    <div className={`mt-3 p-3 rounded-lg border ${
+                      (poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-red-50 border-red-200'
+                    }`}>
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0">
+                          {(poolStatus.availableCards || 0) >= selectedParticipantIds.length ? (
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="ml-3">
+                          <p className={`text-sm font-medium ${
+                            (poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                              ? 'text-green-800'
+                              : 'text-red-800'
+                          }`}>
+                            {(poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                              ? 'Sufficient cards available'
+                              : 'Insufficient cards available'}
+                          </p>
+                          <p className={`text-xs mt-1 ${
+                            (poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                              ? 'text-green-700'
+                              : 'text-red-700'
+                          }`}>
+                            Available: {poolStatus.availableCards || 0} | Needed: {selectedParticipantIds.length}
+                            {(poolStatus.availableCards || 0) < selectedParticipantIds.length && (
+                              <span className="block mt-1 font-medium">
+                                Please add more cards or reduce your selection.
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delivery Method Selection */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Delivery Method
+                    </label>
+                    <select
+                      id="bulkDeliveryMethod"
+                      defaultValue="EMAIL"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <option value="EMAIL">Email</option>
+                      <option value="SMS">SMS</option>
+                      <option value="BOTH">Both Email and SMS</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setShowBulkSendModal(false)}
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const deliveryMethod = (document.getElementById('bulkDeliveryMethod') as HTMLSelectElement)?.value || 'EMAIL';
+                    handleBulkSendGiftCards('AMAZON', 25.00, deliveryMethod);
+                  }}
+                  disabled={loading || !poolStatus || (poolStatus.availableCards || 0) < selectedParticipantIds.length}
+                  className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors shadow-sm hover:shadow-md"
+                >
+                  {loading ? 'Sending...' : `Send to ${selectedParticipantIds.length} Participant${selectedParticipantIds.length !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete/Unsend Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-[55]">
-          <div className="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
-            <div className="mt-3">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
               {activeTab === 'pool' ? (
                 <>
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Delete</h3>
@@ -1605,67 +1968,64 @@ const GiftCardManagement: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <div className="flex items-start mb-4">
+                  <div className="flex items-start mb-5">
                     <div className="flex-shrink-0">
-                      <svg className="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                     </div>
-                    <div className="ml-3">
-                      <h3 className="text-lg font-medium text-gray-900">Unsend Gift Card</h3>
+                    <div className="ml-3 flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Unsend Gift Card</h3>
+                      <p className="text-sm text-gray-600 mb-3">
+                        This action will mark the gift card as unsent. If it came from the pool, it will become available again for sending to other participants. The participant may have already viewed, saved, or redeemed it. Unsending does NOT prevent redemption if they already have the code.
+                      </p>
+                      {selectedItem && (
+                        <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500 mb-1">Gift Card Code</p>
+                          <p className="text-sm font-medium text-gray-900">{selectedItem.cardCode}</p>
+                          {selectedItem.participantPhone && (
+                            <>
+                              <p className="text-xs text-gray-500 mt-2 mb-1">Participant</p>
+                              <p className="text-sm text-gray-700">
+                                {selectedItem.participantPhone}
+                                {selectedItem.participantEmail && ` • ${selectedItem.participantEmail}`}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                    <div className="flex">
-                      <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <div className="ml-3">
-                        <h3 className="text-sm font-medium text-yellow-800">
-                          Warning: Participant May Have Already Redeemed
-                        </h3>
-                        <div className="mt-2 text-sm text-yellow-700">
-                          <p>
-                            This action will remove the gift card from our system, but the participant may have already viewed, saved, or redeemed it. 
-                            Unsending does NOT prevent redemption if they already have the code.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Type <span className="font-bold text-red-600">UNSEND</span> to confirm:
+                      Type <span className="font-semibold text-gray-900">UNSEND</span> to confirm:
                     </label>
                     <input
                       type="text"
                       value={confirmationText}
                       onChange={(e) => setConfirmationText(e.target.value)}
                       placeholder="Type UNSEND here"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                       autoFocus
                     />
                   </div>
                   
-                  <div className="flex justify-end space-x-3">
+                  <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                     <button
                       onClick={() => {
                         setShowDeleteModal(false);
                         setSelectedItem(null);
                         setConfirmationText('');
                       }}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                      className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleDeleteSentCard}
                       disabled={loading || confirmationText !== 'UNSEND'}
-                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors shadow-sm hover:shadow-md"
                     >
                       {loading ? 'Unsending...' : 'Unsend Gift Card'}
                     </button>

@@ -282,13 +282,14 @@ public class GiftCardServiceImpl implements GiftCardService {
 
         try (CSVReader reader = new CSVReader(new InputStreamReader(file.getInputStream()))) {
             List<String[]> rows = reader.readAll();
-            totalRows = rows.size();
+            // totalRows should only count data rows, not the header
+            totalRows = rows.size() > 0 ? rows.size() - 1 : 0;
 
             for (int i = 1; i < rows.size(); i++) { // Skip header
                 String[] row = rows.get(i);
                 try {
-                    if (row.length < 5) {
-                        errors.add("Row " + (i + 1) + ": Insufficient columns");
+                    if (row.length < 4) {
+                        errors.add("Row " + (i + 1) + ": Insufficient columns (need at least: card_code, card_type, card_value, redemption_url)");
                         continue;
                     }
 
@@ -296,7 +297,64 @@ public class GiftCardServiceImpl implements GiftCardService {
                     GiftCardType cardType = GiftCardType.valueOf(row[1].trim().toUpperCase());
                     BigDecimal cardValue = new BigDecimal(row[2].trim());
                     String redemptionUrl = row[3].trim();
-                    String expiresAtStr = row.length > 4 ? row[4].trim() : null;
+                    
+                    // Parse date from separate columns (expires_day, expires_month, expires_year) or single expires_at column
+                    OffsetDateTime expiresAt = null;
+                    
+                    // Check if we have the new format (7+ columns with separate day/month/year)
+                    if (row.length >= 7) {
+                        // New format: separate day, month, year columns
+                        String expiresDayStr = row[4].trim();
+                        String expiresMonthStr = row[5].trim();
+                        String expiresYearStr = row[6].trim();
+                        
+                        // Only parse if all three date fields are provided and non-empty
+                        if (!expiresDayStr.isEmpty() && !expiresMonthStr.isEmpty() && !expiresYearStr.isEmpty()) {
+                            try {
+                                int day = Integer.parseInt(expiresDayStr);
+                                int month = Integer.parseInt(expiresMonthStr);
+                                int year = Integer.parseInt(expiresYearStr);
+                                
+                                // Validate date values
+                                if (month < 1 || month > 12) {
+                                    errors.add("Row " + (i + 1) + ": Invalid month (must be 1-12): " + month);
+                                    continue;
+                                }
+                                if (day < 1 || day > 31) {
+                                    errors.add("Row " + (i + 1) + ": Invalid day (must be 1-31): " + day);
+                                    continue;
+                                }
+                                if (year < 2000 || year > 2100) {
+                                    errors.add("Row " + (i + 1) + ": Invalid year (must be 2000-2100): " + year);
+                                    continue;
+                                }
+                                
+                                // Create OffsetDateTime at end of day in UTC
+                                try {
+                                    expiresAt = OffsetDateTime.of(year, month, day, 23, 59, 59, 0, java.time.ZoneOffset.UTC);
+                                } catch (java.time.DateTimeException e) {
+                                    errors.add("Row " + (i + 1) + ": Invalid date (e.g., February 30th doesn't exist): " + month + "/" + day + "/" + year);
+                                    continue;
+                                }
+                            } catch (NumberFormatException e) {
+                                errors.add("Row " + (i + 1) + ": Invalid date format. Day, month, and year must be numbers. Got: day='" + expiresDayStr + "', month='" + expiresMonthStr + "', year='" + expiresYearStr + "'");
+                                continue;
+                            }
+                        }
+                        // If date columns are empty, expiresAt remains null (no expiration)
+                    } else if (row.length == 5) {
+                        // Legacy format: single expires_at column (ISO-8601 format)
+                        String expiresAtStr = row[4].trim();
+                        if (!expiresAtStr.isEmpty()) {
+                            try {
+                                expiresAt = OffsetDateTime.parse(expiresAtStr);
+                            } catch (Exception e) {
+                                errors.add("Row " + (i + 1) + ": Invalid date format. Use separate day/month/year columns (7 columns) or ISO-8601 format (5 columns). Error: " + e.getMessage());
+                                continue;
+                            }
+                        }
+                    }
+                    // If row.length is 4, no expiration date (expiresAt remains null)
 
                     // Check for duplicates
                     if (giftCardPoolRepository.existsByCardCode(cardCode)) {
@@ -312,10 +370,7 @@ public class GiftCardServiceImpl implements GiftCardService {
                     poolCard.setBatchLabel(batchLabel);
                     poolCard.setUploadedBy(adminUsername);
                     poolCard.setStatus(PoolStatus.AVAILABLE);
-
-                    if (expiresAtStr != null && !expiresAtStr.isEmpty()) {
-                        poolCard.setExpiresAt(OffsetDateTime.parse(expiresAtStr));
-                    }
+                    poolCard.setExpiresAt(expiresAt);
 
                     giftCardPoolRepository.save(poolCard);
                     successfulUploads++;
