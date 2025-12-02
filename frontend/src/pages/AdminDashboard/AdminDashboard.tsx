@@ -67,6 +67,13 @@ const AdminDashboard: React.FC = () => {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showBulkResendModal, setShowBulkResendModal] = useState(false);
   const [showBulkSurveyModal, setShowBulkSurveyModal] = useState(false);
+  
+  // For individual action confirmations
+  const [showRemindConfirmModal, setShowRemindConfirmModal] = useState(false);
+  const [remindRecord, setRemindRecord] = useState<VerificationRecord | null>(null);
+  const [showMarkCompletedConfirmModal, setShowMarkCompletedConfirmModal] = useState(false);
+  const [markCompletedRecord, setMarkCompletedRecord] = useState<VerificationRecord | null>(null);
+  const [isMarkingCompleted, setIsMarkingCompleted] = useState(true); // true = mark completed, false = mark uncompleted
 
   // For success/failure messages
   const [bulkActionMessage, setBulkActionMessage] = useState<string>('');
@@ -76,6 +83,8 @@ const AdminDashboard: React.FC = () => {
     const lowerMessage = message.toLowerCase();
     return lowerMessage.includes('successfully') || 
            lowerMessage.includes('success') ||
+           lowerMessage.includes('reminder sent') ||
+           lowerMessage.includes('reminders sent') ||
            (lowerMessage.includes('completed') && !lowerMessage.includes('error')) ||
            (lowerMessage.includes('deleted') && !lowerMessage.includes('error')) ||
            (lowerMessage.includes('updated') && !lowerMessage.includes('error'));
@@ -329,29 +338,46 @@ const AdminDashboard: React.FC = () => {
     setShowEditModal(false);
   };
 
-  // Mark survey as completed
-  const handleMarkSurveyCompleted = async (invitationId: string) => {
+  // Show confirmation modal for marking survey completed/uncompleted
+  const confirmMarkSurveyStatus = (rec: VerificationRecord) => {
+    setMarkCompletedRecord(rec);
+    setIsMarkingCompleted(!rec.completed_at);
+    setShowMarkCompletedConfirmModal(true);
+  };
+
+  // Mark survey as completed (after confirmation)
+  const proceedMarkSurveyCompleted = async () => {
+    if (!markCompletedRecord) return;
     try {
-      await api.markSurveyCompleted(invitationId);
+      await api.markSurveyCompleted(markCompletedRecord.id);
       // Refresh the data to show updated status
       fetchStatsAndRecords();
-      alert('Survey marked as completed successfully!');
+      setBulkActionMessage('Survey marked as completed successfully!');
+      setShowMarkCompletedConfirmModal(false);
+      setMarkCompletedRecord(null);
     } catch (error) {
       console.error('Error marking survey as completed:', error);
-      alert('Failed to mark survey as completed. Please try again.');
+      setBulkActionMessage('Failed to mark survey as completed. Please try again.');
+      setShowMarkCompletedConfirmModal(false);
+      setMarkCompletedRecord(null);
     }
   };
 
-  // Mark survey as not completed (undo completion)
-  const handleMarkSurveyUncompleted = async (invitationId: string) => {
+  // Mark survey as not completed (after confirmation)
+  const proceedMarkSurveyUncompleted = async () => {
+    if (!markCompletedRecord) return;
     try {
-      await api.markSurveyUncompleted(invitationId);
+      await api.markSurveyUncompleted(markCompletedRecord.id);
       // Refresh the data to show updated status
       fetchStatsAndRecords();
-      alert('Survey marked as not completed successfully!');
+      setBulkActionMessage('Survey marked as not completed successfully!');
+      setShowMarkCompletedConfirmModal(false);
+      setMarkCompletedRecord(null);
     } catch (error) {
       console.error('Error marking survey as not completed:', error);
-      alert('Failed to mark survey as not completed. Please try again.');
+      setBulkActionMessage('Failed to mark survey as not completed. Please try again.');
+      setShowMarkCompletedConfirmModal(false);
+      setMarkCompletedRecord(null);
     }
   };
 
@@ -387,11 +413,19 @@ const AdminDashboard: React.FC = () => {
       });
   };
 
-  const handleResendEmail = (rec: VerificationRecord) => {
+  // Show confirmation modal for remind
+  const confirmRemind = (rec: VerificationRecord) => {
+    setRemindRecord(rec);
+    setShowRemindConfirmModal(true);
+  };
+
+  // Send reminder (after confirmation)
+  const proceedRemind = () => {
+    if (!remindRecord) return;
     const token = localStorage.getItem('adminToken');
     if (!token) return;
 
-    api.post('/api/participants/resend-survey-link', { phone: rec.phone_number, body: 'resend' }, { headers: { Authorization: `Bearer ${token}` } })
+    api.post('/api/participants/resend-survey-link', { phone: remindRecord.phone_number, body: 'resend' }, { headers: { Authorization: `Bearer ${token}` } })
       .then((data) => {
         if (data.ok) {
           // Refresh data immediately
@@ -400,14 +434,19 @@ const AdminDashboard: React.FC = () => {
           setShowEditModal(false);
           setEditRecord(null);
           // Show success message
-          setBulkActionMessage('Resent successfully');
+          const participantName = remindRecord.email?.split('@')[0] || remindRecord.phone_number || 'participant';
+          setBulkActionMessage(`Reminder sent successfully to ${participantName}`);
         } else {
-          setBulkActionMessage(data.error || 'Failed to resend');
+          setBulkActionMessage(data.error || 'Failed to send reminder');
         }
+        setShowRemindConfirmModal(false);
+        setRemindRecord(null);
       })
       .catch((err) => {
         console.error('Resend error:', err);
-        setBulkActionMessage('Failed to resend');
+        setBulkActionMessage('Failed to send reminder');
+        setShowRemindConfirmModal(false);
+        setRemindRecord(null);
       });
   };
 
@@ -429,10 +468,11 @@ const AdminDashboard: React.FC = () => {
     Promise.all(requests)
       .then(() => {
         // Instead of alert, we show a small success message
+        const participantName = selectedRecordIds.length === 1 
+          ? records.find(r => r.id === selectedRecordIds[0])?.email?.split('@')[0] || 'participant'
+          : 'participants';
         setBulkActionMessage(
-          `Resend requests sent for ${selectedRecordIds.length} selected record${
-            selectedRecordIds.length > 1 ? 's' : ''
-          }.`
+          `Reminder${selectedRecordIds.length > 1 ? 's' : ''} sent successfully to ${selectedRecordIds.length} ${selectedRecordIds.length > 1 ? 'participants' : participantName}.`
         );
         fetchStatsAndRecords();
       })
@@ -680,36 +720,42 @@ const AdminDashboard: React.FC = () => {
             <div className="bg-gray-50 border-b border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4 flex-shrink-0">
               <div className="flex flex-wrap gap-3">
                 <button
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm
                     ${selectedRecordIds.length === 0 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-red-600 hover:bg-red-700 text-white'}`}
+                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200' 
+                      : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md'}`}
                   disabled={selectedRecordIds.length === 0}
                   onClick={() => setShowBulkDeleteModal(true)}
                 >
-                  <i className="fas fa-trash-alt mr-2"></i>
+                  <svg className={`w-4 h-4 mr-2 ${selectedRecordIds.length === 0 ? 'text-gray-400' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                   Delete Selected ({selectedRecordIds.length})
                 </button>
                 <button
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm
                     ${selectedRecordIds.length === 0 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-green-600 hover:bg-green-700 text-white'}`}
+                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200' 
+                      : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md'}`}
                   disabled={selectedRecordIds.length === 0}
                   onClick={() => setShowBulkResendModal(true)}
                 >
-                  <i className="fas fa-envelope mr-2"></i>
-                  Resend ({selectedRecordIds.length})
+                  <svg className={`w-4 h-4 mr-2 ${selectedRecordIds.length === 0 ? 'text-gray-400' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  Remind ({selectedRecordIds.length})
                 </button>
                 <button
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm
                     ${selectedRecordIds.length === 0 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200' 
+                      : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md'}`}
                   disabled={selectedRecordIds.length === 0}
                   onClick={() => setShowBulkSurveyModal(true)}
                 >
-                  <i className="fas fa-check-circle mr-2"></i>
+                  <svg className={`w-4 h-4 mr-2 ${selectedRecordIds.length === 0 ? 'text-gray-400' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   Survey Actions ({selectedRecordIds.length})
                 </button>
               </div>
@@ -910,45 +956,41 @@ const AdminDashboard: React.FC = () => {
                                         handleEdit(r);
                                         setActiveActionMenu(null);
                                       }}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                      className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                                       role="menuitem"
                                     >
-                                      <svg className="mr-3 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="mr-3 h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                       </svg>
                                       Edit Details
                                     </button>
                                     <button
                                       onClick={() => {
-                                        handleResendEmail(r);
+                                        confirmRemind(r);
                                         setActiveActionMenu(null);
                                       }}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-green-700 hover:bg-green-100"
+                                      className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-blue-50"
                                       role="menuitem"
                                     >
-                                      <svg className="mr-3 h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                      <svg className="mr-3 h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                       </svg>
-                                      Resend
+                                      Remind
                                     </button>
                                     <button
                                       onClick={() => {
-                                        if (r.completed_at) {
-                                          handleMarkSurveyUncompleted(r.id);
-                                        } else {
-                                          handleMarkSurveyCompleted(r.id);
-                                        }
+                                        confirmMarkSurveyStatus(r);
                                         setActiveActionMenu(null);
                                       }}
                                       className={`flex items-center w-full px-4 py-2 text-sm text-left ${
                                         r.completed_at 
-                                          ? 'text-gray-700 hover:bg-gray-100' 
-                                          : 'text-green-700 hover:bg-green-100'
+                                          ? 'text-slate-700 hover:bg-slate-50' 
+                                          : 'text-emerald-700 hover:bg-emerald-50'
                                       }`}
                                       role="menuitem"
                                     >
                                       <svg className={`mr-3 h-4 w-4 flex-shrink-0 ${
-                                        r.completed_at ? 'text-gray-500' : 'text-green-500'
+                                        r.completed_at ? 'text-slate-500' : 'text-emerald-600'
                                       }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         {r.completed_at ? (
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -963,10 +1005,10 @@ const AdminDashboard: React.FC = () => {
                                         confirmDeleteUser(r);
                                         setActiveActionMenu(null);
                                       }}
-                                      className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                      className="flex items-center w-full px-4 py-2 text-sm text-rose-700 hover:bg-rose-50"
                                       role="menuitem"
                                     >
-                                      <svg className="mr-3 h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <svg className="mr-3 h-4 w-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                       </svg>
                                       Delete
@@ -1184,78 +1226,94 @@ const AdminDashboard: React.FC = () => {
 
       {/* Modals */}
       {showEditModal && editRecord && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={closeEditModal}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4 rounded-t-lg">
-              <h2 className="text-xl font-bold text-white">Edit User Details</h2>
-              <p className="text-blue-100 text-sm mt-1">ID: {editRecord.id}</p>
+            <div className="bg-blue-600 px-6 py-4 rounded-t-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Edit User Details</h2>
+                  <p className="text-blue-100 text-xs mt-0.5">ID: {editRecord.id.substring(0, 8)}...</p>
+                </div>
+              </div>
+              <button
+                onClick={closeEditModal}
+                className="text-white hover:text-blue-200 transition-colors p-1 rounded-lg hover:bg-blue-700"
+                aria-label="Close modal"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             <div className="p-6">
               {/* Form Fields */}
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
                   <input
                     type="text"
                     value={editRecord.phone_number}
                     disabled
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100 text-gray-600"
+                    className="w-full border border-slate-200 rounded-lg px-4 py-2.5 bg-slate-50 text-slate-600 focus:outline-none"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Phone number cannot be changed</p>
+                  <p className="text-xs text-slate-500 mt-1.5">Phone number cannot be changed</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SMS Status</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">SMS Status</label>
                   <input
                     type="text"
-                    value={editRecord.status || 'pending'} // Show actual SMS status
+                    value={editRecord.status || 'pending'}
                     disabled
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100 text-gray-600"
+                    className="w-full border border-slate-200 rounded-lg px-4 py-2.5 bg-slate-50 text-slate-600 focus:outline-none"
                   />
-                  <p className="text-xs text-gray-500 mt-1">SMS status is managed automatically by Twilio</p>
+                  <p className="text-xs text-slate-500 mt-1.5">SMS status is managed automatically by Twilio</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
                   <input
                     type="email"
-                    value={editRecord.email_status || ''} // Use email_status field for actual email
+                    value={editRecord.email_status || ''}
                     onChange={(e) => setEditRecord({ ...editRecord, email_status: e.target.value })}
                     placeholder="Enter email address"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Email will be sent automatically when survey link is assigned</p>
+                  <p className="text-xs text-slate-500 mt-1.5">Email will be sent automatically when survey link is assigned</p>
                 </div>
 
-                {/* Status editing removed - admins can no longer edit status */}
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Link</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Assigned Link</label>
                   <input
                     type="text"
                     value={editRecord.assigned_link || 'None assigned'}
                     disabled
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100 text-gray-600"
+                    className="w-full border border-slate-200 rounded-lg px-4 py-2.5 bg-slate-50 text-slate-600 focus:outline-none"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Link assignment is managed automatically</p>
+                  <p className="text-xs text-slate-500 mt-1.5">Link assignment is managed automatically</p>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-8 flex justify-end gap-3">
                 <button
                   onClick={closeEditModal}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 
-                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                  className="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all shadow-sm hover:shadow-md font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSaveChanges}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 
-                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md font-medium"
                 >
                   Save Changes
                 </button>
@@ -1266,167 +1324,358 @@ const AdminDashboard: React.FC = () => {
       )}
 
       {showDeleteModal && deleteRecord && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-            <h3 className="text-lg font-semibold mb-2">Confirm Deletion</h3>
-            <p className="text-sm text-gray-700 mb-3">
-              Are you sure you want to delete this user record?
-            </p>
-            <p className="italic text-gray-600 mb-4">
-              Phone: {deleteRecord.phone_number} <br />
-              Email: {deleteRecord.email}
-            </p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Record</h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to delete this participant? This action cannot be undone.
+                    {deleteRecord.phone_number && (
+                      <span className="block mt-1 text-gray-700">
+                        <span className="font-medium">Phone:</span> {deleteRecord.phone_number}
+                        {deleteRecord.email && (
+                          <> • <span className="font-medium">Email:</span> {deleteRecord.email}</>
+                        )}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
             
-            {/* Gift Card Warning */}
-            {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards && (
-              <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-blue-800">
-                      Notice: User has {deleteGiftCardInfo.giftCardCount} gift card(s)
-                    </h3>
-                    <div className="mt-2 text-sm text-blue-700">
-                      <p className="mb-2">
-                        This user has been assigned gift card(s). Deleting them will:
-                      </p>
-                      <ul className="list-disc list-inside space-y-1">
-                        <li>Make the gift card(s) available again in the pool</li>
-                        <li>Add the gift card(s) to the unsent history for tracking</li>
-                        <li>Remove the user's access to the gift card(s)</li>
-                      </ul>
-                      {deleteGiftCardInfo.giftCards && deleteGiftCardInfo.giftCards.length > 0 && (
-                        <div className="mt-3">
-                          <p className="font-medium">Gift Card Details:</p>
-                          <div className="mt-1 space-y-1">
-                            {deleteGiftCardInfo.giftCards.map((gc: any, index: number) => (
-                              <div key={index} className="text-xs bg-blue-100 p-2 rounded">
-                                <span className="font-medium">{gc.cardCode}</span> - {gc.cardType} (${gc.cardValue})
-                                {gc.status === 'SENT' && <span className="ml-2 text-green-600">• Sent</span>}
-                                {gc.status === 'UNSENT' && <span className="ml-2 text-gray-600">• Unsent</span>}
-                              </div>
-                            ))}
+              {/* Gift Card Warning */}
+              {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards && (
+                <div className="bg-gray-50 border-l-4 border-gray-400 p-4 mb-4 rounded-r-lg border border-gray-200">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                        Notice: User has {deleteGiftCardInfo.giftCardCount} gift card{deleteGiftCardInfo.giftCardCount > 1 ? 's' : ''}
+                      </h3>
+                      <div className="text-sm text-gray-700">
+                        <p className="mb-2 font-medium">
+                          This user has been assigned gift card(s). Deleting them will:
+                        </p>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600">
+                          <li>Make the gift card(s) available again in the pool</li>
+                          <li>Add the gift card(s) to the unsent history for tracking</li>
+                          <li>Remove the user's access to the gift card(s)</li>
+                        </ul>
+                        {deleteGiftCardInfo.giftCards && deleteGiftCardInfo.giftCards.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="font-semibold text-gray-900 mb-2">Gift Card Details:</p>
+                            <div className="space-y-2">
+                              {deleteGiftCardInfo.giftCards.map((gc: any, index: number) => (
+                                <div key={index} className="bg-white p-2.5 rounded-lg border border-gray-200">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-gray-900">{gc.cardCode}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-gray-600">{gc.cardType}</span>
+                                      <span className="text-xs font-bold text-gray-900">${gc.cardValue}</span>
+                                      {gc.status === 'SENT' && (
+                                        <span className="px-1.5 py-0.5 text-xs font-medium bg-gray-200 text-gray-700 rounded">Sent</span>
+                                      )}
+                                      {gc.status === 'UNSENT' && (
+                                        <span className="px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded">Unsent</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
+              )}
+              
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
+                    focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
+                  onClick={closeDeleteModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all"
+                  onClick={proceedDelete}
+                >
+                  {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards ? 'Delete & Make Gift Cards Available' : 'Delete'}
+                </button>
               </div>
-            )}
-            
-            <div className="flex justify-end gap-2">
-              <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
-                onClick={closeDeleteModal}
-              >
-                Cancel
-              </button>
-              <button
-                className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-md text-sm"
-                onClick={proceedDelete}
-              >
-                {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards ? 'Delete & Make Gift Cards Available' : 'Delete'}
-              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remind Confirmation Modal */}
+      {showRemindConfirmModal && remindRecord && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Send Reminder</h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to send a reminder to this participant?
+                    {remindRecord.phone_number && (
+                      <span className="block mt-1 text-gray-700">
+                        <span className="font-medium">Phone:</span> {remindRecord.phone_number}
+                        {remindRecord.email && (
+                          <> • <span className="font-medium">Email:</span> {remindRecord.email}</>
+                        )}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
+                    focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
+                  onClick={() => { setShowRemindConfirmModal(false); setRemindRecord(null); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
+                  onClick={proceedRemind}
+                >
+                  Send Reminder
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark Survey Completed/Uncompleted Confirmation Modal */}
+      {showMarkCompletedConfirmModal && markCompletedRecord && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className={`w-6 h-6 ${isMarkingCompleted ? 'text-emerald-600' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {isMarkingCompleted ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    )}
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    {isMarkingCompleted ? 'Mark Survey Completed' : 'Mark Survey Not Completed'}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to {isMarkingCompleted ? 'mark this survey as completed' : 'mark this survey as not completed'}?
+                    {markCompletedRecord.phone_number && (
+                      <span className="block mt-1 text-gray-700">
+                        <span className="font-medium">Phone:</span> {markCompletedRecord.phone_number}
+                        {markCompletedRecord.email && (
+                          <> • <span className="font-medium">Email:</span> {markCompletedRecord.email}</>
+                        )}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
+                    focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
+                  onClick={() => { setShowMarkCompletedConfirmModal(false); setMarkCompletedRecord(null); }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={`px-5 py-2.5 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all ${
+                    isMarkingCompleted 
+                      ? 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500' 
+                      : 'bg-gray-600 hover:bg-gray-700 focus:ring-gray-500'
+                  }`}
+                  onClick={isMarkingCompleted ? proceedMarkSurveyCompleted : proceedMarkSurveyUncompleted}
+                >
+                  {isMarkingCompleted ? 'Mark as Completed' : 'Mark as Not Completed'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-2">Confirm Bulk Deletion</h3>
-            <p className="text-sm text-gray-700 mb-3">
-              Are you sure you want to delete {selectedRecordIds.length} selected record
-              {selectedRecordIds.length > 1 ? 's' : ''}?
-            </p>
-            <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Records</h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to delete {selectedRecordIds.length}{' '}
+                    {selectedRecordIds.length > 1 ? 'participants' : 'participant'}? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
               <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors"
                 onClick={() => setShowBulkDeleteModal(false)}
               >
                 Cancel
               </button>
               <button
-                className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-md text-sm"
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all"
                 onClick={proceedBulkDelete}
               >
                 Delete
               </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {showBulkResendModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-2">Confirm Bulk Resend</h3>
-            <p className="text-sm text-gray-700 mb-3">
-              Are you sure you want to resend to {selectedRecordIds.length}{' '}
-              selected record
-              {selectedRecordIds.length > 1 ? 's' : ''}?
-            </p>
-            <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Send Reminders</h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to send reminders to {selectedRecordIds.length}{' '}
+                    {selectedRecordIds.length > 1 ? 'participants' : 'participant'}?
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
               <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors"
                 onClick={() => setShowBulkResendModal(false)}
               >
                 Cancel
               </button>
               <button
-                className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-md text-sm"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
                 onClick={proceedBulkResendEmail}
               >
-                Resend
+                  Send Reminders
               </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {showBulkSurveyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-2">Bulk Survey Actions</h3>
-            <p className="text-sm text-gray-700 mb-4">
-              Choose an action for {selectedRecordIds.length} selected record
-              {selectedRecordIds.length > 1 ? 's' : ''}:
-            </p>
-            <div className="space-y-3 mb-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-6">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="ml-4 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Survey Actions</h3>
+                  <p className="text-sm text-gray-600">
+                    Update survey status for {selectedRecordIds.length}{' '}
+                    {selectedRecordIds.length > 1 ? 'participants' : 'participant'}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 mb-6">
               <button
-                className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center"
+                  className="group relative bg-white border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-4 text-left transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
                 onClick={async () => {
                   await handleBulkMarkSurveysCompleted();
                   setShowBulkSurveyModal(false);
                 }}
               >
-                <i className="fas fa-check mr-2"></i>
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                      <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 group-hover:text-emerald-700 transition-colors">
                 Mark as Completed
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Mark surveys as finished
+                      </p>
+                    </div>
+                  </div>
               </button>
+                
               <button
-                className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center"
+                  className="group relative bg-white border-2 border-slate-200 hover:border-slate-400 rounded-xl p-4 text-left transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
                 onClick={async () => {
                   await handleBulkMarkSurveysUncompleted();
                   setShowBulkSurveyModal(false);
                 }}
               >
-                <i className="fas fa-undo mr-2"></i>
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-slate-200 transition-colors">
+                      <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                      </svg>
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 group-hover:text-slate-700 transition-colors">
                 Mark as Not Completed
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Revert to pending status
+                      </p>
+                    </div>
+                  </div>
               </button>
             </div>
-            <div className="flex justify-end">
+              
+              <div className="flex justify-end pt-4 border-t border-gray-200">
               <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors"
                 onClick={() => setShowBulkSurveyModal(false)}
               >
                 Cancel
               </button>
+              </div>
             </div>
           </div>
         </div>

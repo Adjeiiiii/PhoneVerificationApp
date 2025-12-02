@@ -531,7 +531,22 @@ public class AdminSurveyController {
         String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 
                 ? inv.getShortLinkUrl() 
                 : inv.getLinkUrl();
-        String smsBody = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
+        
+        // Check if this is a reminder (has been sent before) or first-time send
+        boolean isReminder = inv.getQueuedAt() != null || inv.getSentAt() != null;
+        String smsBody;
+        if (isReminder) {
+            // Reminder message - more friendly and encouraging
+            String participantName = p.getName() != null && !p.getName().trim().isEmpty() 
+                    ? p.getName() 
+                    : "there";
+            smsBody = String.format("Hi %s! Just a friendly reminder: Please complete the Howard University AI for Health survey. Your link: %s. You can pause and restart anytime. Complete within 10 days to receive your Amazon gift card. Questions? Text us at (240) 428-8442.", 
+                    participantName, linkToSend);
+        } else {
+            // First-time message
+            smsBody = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
+        }
+        
         Map<String, Object> send = smsService.send(phone, smsBody);
 
         // 3) Persist queued state if accepted by Twilio

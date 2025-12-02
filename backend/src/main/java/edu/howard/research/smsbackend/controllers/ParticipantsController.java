@@ -129,8 +129,37 @@ public class ParticipantsController {
                 if (existingInvitation.isPresent()) {
                     var invitation = existingInvitation.get();
                     
-                    // Resend the existing survey link
-                    String body = "Here's the Howard University AI for Health survey link: " + invitation.getLinkUrl() + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
+                    // Refresh the invitation entity to ensure we have the latest data
+                    invitation = invitationRepository.findById(invitation.getId()).orElse(invitation);
+                    
+                    // Check if this is a reminder (has been sent before) or first-time send
+                    // If invitation was created more than a few minutes ago OR has been queued/sent, it's a reminder
+                    boolean isReminder = invitation.getQueuedAt() != null 
+                            || invitation.getSentAt() != null 
+                            || (invitation.getCreatedAt() != null 
+                                && invitation.getCreatedAt().isBefore(java.time.OffsetDateTime.now().minusMinutes(5)));
+                    
+                    log.info("Resending survey link for phone: {}, isReminder: {}, queuedAt: {}, sentAt: {}", 
+                            phone, isReminder, invitation.getQueuedAt(), invitation.getSentAt());
+                    
+                    String linkToSend = (invitation.getShortLinkUrl() != null && !invitation.getShortLinkUrl().isBlank()) 
+                            ? invitation.getShortLinkUrl() 
+                            : invitation.getLinkUrl();
+                    
+                    // Personalized message based on whether it's a reminder or first-time
+                    String body;
+                    if (isReminder) {
+                        // Reminder message - more friendly and encouraging
+                        String participantName = participant.getName() != null && !participant.getName().trim().isEmpty() 
+                                ? participant.getName() 
+                                : "there";
+                        body = String.format("Hi %s! Just a friendly reminder: Please complete the Howard University AI for Health survey. Your link: %s. You can pause and restart anytime. Complete within 10 days to receive your Amazon gift card. Questions? Text us at (240) 428-8442.", 
+                                participantName, linkToSend);
+                    } else {
+                        // First-time message
+                        body = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
+                    }
+                    
                     Map<String, Object> send = smsService.send(phone, body);
                     
                     // Send email if participant has email address
@@ -154,7 +183,7 @@ public class ParticipantsController {
                         return ResponseEntity.ok(Map.of(
                             "ok", true,
                             "linkUrl", invitation.getLinkUrl(),
-                            "message", "Survey link resent successfully!"
+                            "message", isReminder ? "Reminder sent successfully!" : "Survey link sent successfully!"
                         ));
                     } else {
                         String error = (String) send.get("error");
