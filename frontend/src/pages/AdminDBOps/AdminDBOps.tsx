@@ -113,37 +113,101 @@ const AdminDBOps: React.FC = () => {
     fetchLinks(token);
   }, [navigate]);
 
+  // Helper function to fetch all pages of data
+  const fetchAllPages = async (endpoint: string, token: string, pageSize: number = 200): Promise<any[]> => {
+    // Fetch first page to get total count
+    const firstPage: any = await api.get(`${endpoint}?page=0&size=${pageSize}`, { headers: { Authorization: `Bearer ${token}` } });
+    const allItems = [...(firstPage.content || [])];
+    
+    // If there are more pages, fetch them all
+    const totalPages = firstPage.totalPages || 1;
+    if (totalPages > 1) {
+      const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 1);
+      const pagePromises = remainingPages.map(pageNum =>
+        api.get(`${endpoint}?page=${pageNum}&size=${pageSize}`, { headers: { Authorization: `Bearer ${token}` } })
+      );
+      const remainingPagesData = await Promise.all(pagePromises);
+      remainingPagesData.forEach((pageData: any) => {
+        if (pageData.content) {
+          allItems.push(...pageData.content);
+        }
+      });
+    }
+    
+    return allItems;
+  };
+
   const fetchLinks = (token: string) => {
     // Fetch both links and invitations to determine actual usage
+    // Fetch all pages to ensure we get all data, even if there are more than 200 items
     Promise.all([
-      api.get('/api/admin/links', { headers: { Authorization: `Bearer ${token}` } }),
-      api.get('/api/admin/invitations', { headers: { Authorization: `Bearer ${token}` } })
+      fetchAllPages('/api/admin/links', token),
+      fetchAllPages('/api/admin/invitations', token)
     ])
-      .then(([linksData, invitationsData]: [any, any]) => {
-        if (linksData && linksData.content && invitationsData && invitationsData.content) {
+      .then(([allLinks, allInvitations]: [any[], any[]]) => {
+        // Handle case where we have links but no invitations (or vice versa)
+        const links = allLinks || [];
+        const invitations = allInvitations || [];
+        
+        if (links.length > 0) {
+          console.log(`Fetched ${links.length} links and ${invitations.length} invitations`);
+          console.log('Raw invitations data (first 3):', JSON.stringify(invitations.slice(0, 3), null, 2));
+          console.log('Raw links data (first 3):', JSON.stringify(links.slice(0, 3), null, 2));
+          
           // Create a map of link ID to participant info from invitations
+          // Try to match by link.id first, then fallback to linkUrl matching
           const linkToParticipant = new Map();
-          invitationsData.content.forEach((inv: any) => {
-            if (inv.link?.id) {
-              linkToParticipant.set(inv.link.id, {
+          invitations.forEach((inv: any) => {
+            // First try to use link.id if available (could be inv.link.id or inv.linkId)
+            const linkId = inv.link?.id || inv.linkId;
+            if (linkId) {
+              linkToParticipant.set(linkId, {
                 phone: inv.participant?.phone || null,
                 email: inv.participant?.email || null
               });
+              console.log(`Mapped invitation to link ID: ${linkId}`);
+            }
+            // Also create a map by linkUrl as fallback (denormalized field)
+            if (inv.linkUrl) {
+              linkToParticipant.set(`url:${inv.linkUrl}`, {
+                phone: inv.participant?.phone || null,
+                email: inv.participant?.email || null
+              });
+              console.log(`Mapped invitation to link URL: ${inv.linkUrl}`);
             }
           });
           
           // Convert backend format to frontend format
-          const convertedLinks = linksData.content.map((link: any) => {
-            const participant = linkToParticipant.get(link.id);
+          const convertedLinks = links.map((link: any) => {
+            // Try to find participant by link ID first
+            let participant = linkToParticipant.get(link.id);
+            // If not found, try matching by linkUrl
+            if (!participant && link.linkUrl) {
+              participant = linkToParticipant.get(`url:${link.linkUrl}`);
+            }
+            const isUsed = !!participant;
+            // Debug logging for used links
+            if (isUsed) {
+              console.log('Found used link:', {
+                linkId: link.id,
+                linkUrl: link.linkUrl,
+                participant: participant
+              });
+            }
             return {
               id: link.id,
               link: link.linkUrl, // Map linkUrl to link
               shortLink: link.shortLinkUrl || null, // Map shortLinkUrl
-              used: !!participant, // Only truly assigned links are used
+              used: isUsed, // Only truly assigned links are used
               assigned_phone: participant?.phone || null,
               assigned_email: participant?.email || null
             };
           });
+          
+          // Debug: Log how many links are marked as used
+          const usedCount = convertedLinks.filter((l: LinkRecord) => l.used).length;
+          console.log(`Total links: ${convertedLinks.length}, Used links: ${usedCount}`);
+          console.log('Used links details:', convertedLinks.filter((l: LinkRecord) => l.used));
           setLinks(convertedLinks);
           setLoading(false);
           setIsInitialLoad(false);
@@ -246,12 +310,6 @@ const AdminDBOps: React.FC = () => {
   const closeDeleteModal = () => {
     setDeleteTarget(null);
     setShowDeleteModal(false);
-  };
-
-  // Custom function to confirm deletion (used in Edit Modal)
-  const confirmDeleteUser = (record: LinkRecord) => {
-    setDeleteTarget(record);
-    setShowDeleteModal(true);
   };
 
   const confirmDeleteLink = () => {
@@ -465,9 +523,9 @@ const AdminDBOps: React.FC = () => {
 
   return (
     <AdminLayout title="Database Operations" searchQuery={searchQuery} onSearchChange={handleSearchChange}>
-      <div className="container mx-auto px-6 py-6">
+      <div className="container mx-auto px-6 py-6 flex-1 flex flex-col min-h-0 overflow-hidden">
         {loading && !isInitialLoad && (
-          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md">
+          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md flex-shrink-0">
             <div className="flex items-center gap-2 text-blue-700 text-sm">
               <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
               <span>Refreshing data...</span>
@@ -475,102 +533,128 @@ const AdminDBOps: React.FC = () => {
           </div>
         )}
         {actionMessage && (
-          <div className={`mb-4 p-4 rounded-md ${
-            actionMessage.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          <div className={`mb-4 p-4 rounded-md flex-shrink-0 ${
+            actionMessage.includes('success') || actionMessage.includes('copied') 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-red-100 text-red-800'
           }`}>
             {actionMessage}
           </div>
         )}
 
-        <div className="bg-white rounded-md shadow p-4 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div>
-              <h2 className="text-lg font-semibold">Links Management</h2>
-              <p className="text-sm text-gray-700">
-                Below is a list of all links in the database.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-                onClick={() => setShowCsvUploadModal(true)}
-              >
-                <i className="fas fa-upload mr-2"></i>
-                Upload Links
-              </button>
-              <button
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors
-                  ${selectedLinkIds.length === 0 
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                    : 'bg-red-600 hover:bg-red-700 text-white'}`}
-                disabled={selectedLinkIds.length === 0}
-                onClick={() => setShowBulkDeleteModal(true)}
-              >
-                <i className="fas fa-trash-alt mr-2"></i>
-                Delete Selected ({selectedLinkIds.length})
-              </button>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Show:</span>
-                <select
-                  value={recordsPerPage}
-                  onChange={handleRecordsPerPageChange}
-                  className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+        <div className="bg-white rounded-lg shadow overflow-hidden flex-1 flex flex-col min-h-0">
+          <div className="p-4 flex-shrink-0">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-semibold">Links Management</h2>
+                <p className="text-sm text-gray-700">
+                  Below is a list of all links in the database.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all flex items-center"
+                  onClick={() => setShowCsvUploadModal(true)}
                 >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-                <span className="text-sm text-gray-600">entries</span>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload Links
+                </button>
+                <button
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm
+                    ${selectedLinkIds.length === 0 
+                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200' 
+                      : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md'}`}
+                  disabled={selectedLinkIds.length === 0}
+                  onClick={() => setShowBulkDeleteModal(true)}
+                >
+                  <svg className={`w-4 h-4 mr-2 ${selectedLinkIds.length === 0 ? 'text-gray-400' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete Selected ({selectedLinkIds.length})
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Show:</span>
+                  <select
+                    value={recordsPerPage}
+                    onChange={handleRecordsPerPageChange}
+                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <span className="text-sm text-gray-600">entries</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Filter row */}
-          <div className="flex items-center gap-2 mb-4">
-            <label htmlFor="filterSelect" className="font-medium text-sm">
-              Filter by:
-            </label>
-            <select
-              id="filterSelect"
-              value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value as FilterOption);
-                setCurrentPage(1); // Reset to first page when filter changes
-              }}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-            >
-              <option value="all">All</option>
-              <option value="used">Used Only</option>
-              <option value="unused">Unused Only</option>
-            </select>
+            {/* Filter row */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="filterSelect" className="font-medium text-sm">
+                Filter by:
+              </label>
+              <select
+                id="filterSelect"
+                value={filter}
+                onChange={(e) => {
+                  setFilter(e.target.value as FilterOption);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+              >
+                <option value="all">All</option>
+                <option value="used">Used Only</option>
+                <option value="unused">Unused Only</option>
+              </select>
+            </div>
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto overflow-y-visible">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-gray-100 text-gray-700 text-left">
-                <tr>
-                  <th className="p-2 w-10">
-                    <input
-                      type="checkbox"
-                      checked={
-                        paginatedLinks.length > 0 &&
-                        paginatedLinks.every((l) => selectedLinkIds.includes(l.id))
-                      }
-                      onChange={toggleSelectAll}
-                    />
-                  </th>
-                  <th className="p-2">Short Link</th>
-                  <th className="p-2">Long Link</th>
-                  <th className="p-2 w-16">Used?</th>
-                  <th className="p-2 w-32">Assigned Phone</th>
-                  <th className="p-2 w-32">Assigned Email</th>
-                  <th className="p-2 w-16">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedLinks.map((ln) => (
+          {paginatedLinks.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center py-12">
+              <div className="text-center">
+                <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <p className="text-gray-600 text-lg font-medium">No links found</p>
+                <p className="text-gray-500 text-sm mt-1">
+                  {filter === 'used' 
+                    ? 'No used links match your filter.' 
+                    : filter === 'unused'
+                    ? 'No unused links match your filter.'
+                    : 'Upload links via CSV to get started.'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 flex flex-col border-t border-gray-200">
+              <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="sticky top-0 bg-gray-100 z-10 shadow-sm">
+                    <tr>
+                      <th className="p-2 w-10 bg-gray-100">
+                        <input
+                          type="checkbox"
+                          checked={
+                            paginatedLinks.length > 0 &&
+                            paginatedLinks.every((l) => selectedLinkIds.includes(l.id))
+                          }
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
+                      <th className="p-2 bg-gray-100">Short Link</th>
+                      <th className="p-2 bg-gray-100">Long Link</th>
+                      <th className="p-2 w-16 bg-gray-100">Used?</th>
+                      <th className="p-2 w-32 bg-gray-100">Assigned Phone</th>
+                      <th className="p-2 w-32 bg-gray-100">Assigned Email</th>
+                      <th className="p-2 w-16 bg-gray-100">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedLinks.map((ln) => (
                   <tr key={ln.id} className="border-b hover:bg-gray-50 transition">
                     <td className="p-2">
                       <input
@@ -582,27 +666,14 @@ const AdminDBOps: React.FC = () => {
                     </td>
                     <td className="p-2 break-words">
                       {ln.shortLink ? (
-                        <div>
-                          <a 
-                            href={ln.shortLink} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline font-medium"
-                          >
-                            {ln.shortLink}
-                          </a>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(ln.shortLink!);
-                              setActionMessage('Short link copied to clipboard!');
-                              setTimeout(() => setActionMessage(''), 3000);
-                            }}
-                            className="ml-2 text-gray-500 hover:text-gray-700"
-                            title="Copy short link"
-                          >
-                            <i className="fas fa-copy"></i>
-                          </button>
-                        </div>
+                        <a 
+                          href={ln.shortLink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline font-medium"
+                        >
+                          {ln.shortLink}
+                        </a>
                       ) : (
                         <span className="text-gray-400 italic">Not shortened</span>
                       )}
@@ -650,13 +721,16 @@ const AdminDBOps: React.FC = () => {
                       )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Pagination */}
-          <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between mt-4">
+          {paginatedLinks.length > 0 && (
+            <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div className="text-sm text-gray-700">
               Showing {indexOfFirstRecord + 1} to {Math.min(indexOfLastRecord, filteredLinks.length)} of {filteredLinks.length} entries
             </div>
@@ -698,42 +772,72 @@ const AdminDBOps: React.FC = () => {
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
 
       {/* EDIT MODAL */}
       {showEditModal && editLink && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-md shadow-md w-full max-w-lg p-6 relative">
-            <h2 className="text-xl font-bold mb-4 text-center">Edit Link</h2>
-            <label className="block text-left font-medium mb-1 text-sm">
-              Link Text
-            </label>
-            <input
-              type="text"
-              value={editLink.link}
-              onChange={(e) => setEditLink({ ...editLink, link: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 mb-4"
-            />
-            <div className="flex justify-evenly mt-6">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeEditModal();
+            }
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Edit Link</h2>
+                  <p className="text-blue-100 text-xs mt-0.5">Update link details</p>
+                </div>
+              </div>
               <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
                 onClick={closeEditModal}
+                className="text-white hover:text-blue-200 transition-colors p-1 rounded-lg hover:bg-blue-700"
+                aria-label="Close modal"
               >
-                Cancel
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
-              <button
-                className="bg-blue-800 hover:bg-blue-900 text-white px-4 py-2 rounded-md text-sm"
-                onClick={handleSaveLink}
-              >
-                Save
-              </button>
-              <button
-                className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-md text-sm"
-                onClick={() => confirmDeleteUser(editLink)}
-              >
-                Delete
-              </button>
+            </div>
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Link URL
+                </label>
+                <input
+                  type="text"
+                  value={editLink.link}
+                  onChange={(e) => setEditLink({ ...editLink, link: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Enter link URL"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  className="px-5 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all shadow-sm hover:shadow-md font-medium text-sm"
+                  onClick={closeEditModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md font-medium text-sm"
+                  onClick={handleSaveLink}
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -741,29 +845,47 @@ const AdminDBOps: React.FC = () => {
 
       {/* CUSTOM DELETE MODAL */}
       {showDeleteModal && deleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-md shadow-md w-full max-w-md p-6 text-center">
-            <h3 className="text-lg font-semibold mb-2">Confirm Deletion</h3>
-            <p className="text-sm text-gray-700 mb-3">
-              Are you sure you want to delete this link?
-            </p>
-            <p className="italic text-gray-600 mb-4">
-              Assigned Phone: {deleteTarget.assigned_phone || '—'} <br />
-              Assigned Email: {deleteTarget.assigned_email || '—'}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
-                onClick={closeDeleteModal}
-              >
-                Cancel
-              </button>
-              <button
-                className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-md text-sm"
-                onClick={confirmDeleteLink}
-              >
-                Delete
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Link</h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to delete this link? This action cannot be undone.
+                    {(deleteTarget.assigned_phone || deleteTarget.assigned_email) && (
+                      <span className="block mt-1 text-gray-700">
+                        {deleteTarget.assigned_phone && (
+                          <> <span className="font-medium">Phone:</span> {deleteTarget.assigned_phone}</>
+                        )}
+                        {deleteTarget.assigned_email && (
+                          <> • <span className="font-medium">Email:</span> {deleteTarget.assigned_email}</>
+                        )}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
+                    focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
+                  onClick={closeDeleteModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all"
+                  onClick={confirmDeleteLink}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -771,45 +893,70 @@ const AdminDBOps: React.FC = () => {
 
       {/* CSV SUCCESS MODAL */}
       {showCsvSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-md shadow-md w-full max-w-md p-6 text-center">
-            <h3 className="text-lg font-semibold mb-3">CSV Upload Result</h3>
-            <p className="text-sm text-gray-700 mb-4">
-              {csvSuccessCount !== null
-                ? `Successfully inserted ${csvSuccessCount} new links.`
-                : 'Success!'}
-            </p>
-            <button
-              className="bg-blue-800 hover:bg-blue-900 text-white px-4 py-2 rounded-md text-sm"
-              onClick={closeCsvSuccessModal}
-            >
-              OK
-            </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">CSV Upload Result</h3>
+                  <p className="text-sm text-gray-600">
+                    {csvSuccessCount !== null
+                      ? `Successfully inserted ${csvSuccessCount} new link${csvSuccessCount !== 1 ? 's' : ''}.`
+                      : 'Success!'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end mt-6">
+                <button
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
+                  onClick={closeCsvSuccessModal}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* New Bulk Delete Modal */}
       {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-md shadow-md w-full max-w-md p-6 text-center">
-            <h3 className="text-lg font-semibold mb-2">Confirm Bulk Deletion</h3>
-            <p className="text-sm text-gray-700 mb-3">
-              Are you sure you want to delete {selectedLinkIds.length} selected link{selectedLinkIds.length > 1 ? 's' : ''}?
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm"
-                onClick={() => setShowBulkDeleteModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-md text-sm"
-                onClick={handleBulkDelete}
-              >
-                Delete
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Links</h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to delete {selectedLinkIds.length} selected link{selectedLinkIds.length > 1 ? 's' : ''}? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
+                    focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
+                  onClick={() => setShowBulkDeleteModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all"
+                  onClick={handleBulkDelete}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -857,10 +1004,10 @@ const AdminDBOps: React.FC = () => {
                 </div>
               </div>
 
-              {/* Batch Label */}
+              {/* Batch Label - Disabled */}
               <div>
-                <label htmlFor="batchLabel" className="block text-sm font-medium text-gray-700 mb-1">
-                  Batch Label (optional)
+                <label htmlFor="batchLabel" className="block text-sm font-medium text-gray-500 mb-1">
+                  Batch Label (disabled)
                 </label>
                 <input
                   id="batchLabel"
@@ -868,7 +1015,8 @@ const AdminDBOps: React.FC = () => {
                   value={csvBatchLabel}
                   onChange={(e) => setCsvBatchLabel(e.target.value)}
                   placeholder="e.g., Pilot_2025_09"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  disabled
+                  className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
                 />
               </div>
 
@@ -954,6 +1102,53 @@ const AdminDBOps: React.FC = () => {
                 </svg>
                 Edit
               </button>
+              {(() => {
+                const link = links.find(l => l.id === activeDropdownId);
+                return (
+                  <>
+                    {link?.shortLink && (
+                      <button
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                        onClick={() => {
+                          if (link.shortLink) {
+                            navigator.clipboard.writeText(link.shortLink);
+                            setActionMessage('Short link copied to clipboard!');
+                            setTimeout(() => setActionMessage(''), 3000);
+                          }
+                          setActiveDropdownId(null);
+                          setDropdownPosition(null);
+                        }}
+                      >
+                        <svg className="w-4 h-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                          <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                        </svg>
+                        Copy Short Link
+                      </button>
+                    )}
+                    {link?.link && (
+                      <button
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                        onClick={() => {
+                          if (link.link) {
+                            navigator.clipboard.writeText(link.link);
+                            setActionMessage('Long link copied to clipboard!');
+                            setTimeout(() => setActionMessage(''), 3000);
+                          }
+                          setActiveDropdownId(null);
+                          setDropdownPosition(null);
+                        }}
+                      >
+                        <svg className="w-4 h-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                          <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                        </svg>
+                        Copy Long Link
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
               <button
                 className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flex items-center"
                 onClick={() => {

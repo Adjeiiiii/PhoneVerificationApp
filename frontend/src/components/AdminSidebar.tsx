@@ -54,7 +54,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentPage: _currentPage }
 
   return (
     <div
-      className={`bg-gray-800 text-white flex flex-col transition-all duration-300 ${
+      className={`bg-gray-800 text-white flex flex-col transition-all duration-300 h-full overflow-hidden ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >

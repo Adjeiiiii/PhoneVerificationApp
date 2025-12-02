@@ -764,7 +764,7 @@ const AdminDashboard: React.FC = () => {
                 <select
                   value={recordsPerPage}
                   onChange={handleRecordsPerPageChange}
-                  className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm cursor-pointer"
                 >
                   <option value={10}>10</option>
                   <option value={25}>25</option>
@@ -868,16 +868,6 @@ const AdminDashboard: React.FC = () => {
                                   >
                                     {r.short_link}
                                   </a>
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(r.short_link!);
-                                      // You could add a toast notification here
-                                    }}
-                                    className="ml-2 text-gray-500 hover:text-gray-700"
-                                    title="Copy short link"
-                                  >
-                                    <i className="fas fa-copy text-xs"></i>
-                                  </button>
                                 </div>
                                 {r.assigned_link && (
                                   <div className="text-xs text-gray-500 truncate max-w-xs" title={r.assigned_link}>
@@ -964,6 +954,40 @@ const AdminDashboard: React.FC = () => {
                                       </svg>
                                       Edit Details
                                     </button>
+                                    {r.short_link && (
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(r.short_link!);
+                                          setActionMessage('Short link copied to clipboard!');
+                                          setTimeout(() => setActionMessage(''), 3000);
+                                          setActiveActionMenu(null);
+                                        }}
+                                        className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                        role="menuitem"
+                                      >
+                                        <svg className="mr-3 h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        Copy Short Link
+                                      </button>
+                                    )}
+                                    {r.assigned_link && (
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(r.assigned_link!);
+                                          setActionMessage('Long link copied to clipboard!');
+                                          setTimeout(() => setActionMessage(''), 3000);
+                                          setActiveActionMenu(null);
+                                        }}
+                                        className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                        role="menuitem"
+                                      >
+                                        <svg className="mr-3 h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        Copy Long Link
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => {
                                         confirmRemind(r);
@@ -1098,15 +1122,13 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {verifiedWithoutInvitations.length === 0 ? (
-              <div className="text-center py-12 flex-1 flex items-center justify-center">
-                <div>
-                  <div className="text-gray-400 mb-2">
-                    <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-600 text-lg font-medium">All verified participants have received survey links!</p>
-                  <p className="text-gray-500 text-sm mt-1">No participants are waiting for links.</p>
+              <div className="flex-1 flex items-center justify-center py-12">
+                <div className="text-center">
+                  <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                  <p className="text-gray-600 text-lg font-medium">No participants waiting</p>
+                  <p className="text-gray-500 text-sm mt-1">All verified participants have received survey links.</p>
                 </div>
               </div>
             ) : (
@@ -1349,33 +1371,33 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             
-              {/* Gift Card Warning */}
-              {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards && (
+            {/* Gift Card Warning */}
+            {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards && (
                 <div className="bg-gray-50 border-l-4 border-gray-400 p-4 mb-4 rounded-r-lg border border-gray-200">
                   <div className="flex items-start">
-                    <div className="flex-shrink-0">
+                  <div className="flex-shrink-0">
                       <svg className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                    </div>
+                    </svg>
+                  </div>
                     <div className="ml-3 flex-1">
                       <h3 className="text-sm font-semibold text-gray-900 mb-2">
                         Notice: User has {deleteGiftCardInfo.giftCardCount} gift card{deleteGiftCardInfo.giftCardCount > 1 ? 's' : ''}
-                      </h3>
+                    </h3>
                       <div className="text-sm text-gray-700">
                         <p className="mb-2 font-medium">
-                          This user has been assigned gift card(s). Deleting them will:
-                        </p>
+                        This user has been assigned gift card(s). Deleting them will:
+                      </p>
                         <ul className="list-disc list-inside space-y-1 text-gray-600">
-                          <li>Make the gift card(s) available again in the pool</li>
-                          <li>Add the gift card(s) to the unsent history for tracking</li>
-                          <li>Remove the user's access to the gift card(s)</li>
-                        </ul>
-                        {deleteGiftCardInfo.giftCards && deleteGiftCardInfo.giftCards.length > 0 && (
+                        <li>Make the gift card(s) available again in the pool</li>
+                        <li>Add the gift card(s) to the unsent history for tracking</li>
+                        <li>Remove the user's access to the gift card(s)</li>
+                      </ul>
+                      {deleteGiftCardInfo.giftCards && deleteGiftCardInfo.giftCards.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
                             <p className="font-semibold text-gray-900 mb-2">Gift Card Details:</p>
                             <div className="space-y-2">
-                              {deleteGiftCardInfo.giftCards.map((gc: any, index: number) => (
+                            {deleteGiftCardInfo.giftCards.map((gc: any, index: number) => (
                                 <div key={index} className="bg-white p-2.5 rounded-lg border border-gray-200">
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs font-semibold text-gray-900">{gc.cardCode}</span>
@@ -1390,31 +1412,31 @@ const AdminDashboard: React.FC = () => {
                                       )}
                                     </div>
                                   </div>
-                                </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              )}
-              
+              </div>
+            )}
+            
               <div className="flex justify-end gap-3 mt-6">
-                <button
+              <button
                   className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
                     focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
-                  onClick={closeDeleteModal}
-                >
-                  Cancel
-                </button>
-                <button
+                onClick={closeDeleteModal}
+              >
+                Cancel
+              </button>
+              <button
                   className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all"
-                  onClick={proceedDelete}
-                >
-                  {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards ? 'Delete & Make Gift Cards Available' : 'Delete'}
-                </button>
+                onClick={proceedDelete}
+              >
+                {deleteGiftCardInfo && deleteGiftCardInfo.hasGiftCards ? 'Delete & Make Gift Cards Available' : 'Delete'}
+              </button>
               </div>
             </div>
           </div>
