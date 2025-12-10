@@ -96,6 +96,10 @@ const GiftCardManagement: React.FC = () => {
   // Bulk selection for eligible participants
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   
+  // Bulk selection for pool cards
+  const [selectedPoolCardIds, setSelectedPoolCardIds] = useState<string[]>([]);
+  const [showBulkDeletePoolModal, setShowBulkDeletePoolModal] = useState(false);
+  
   // Sent gift cards
   const [sentGiftCards, setSentGiftCards] = useState<GiftCard[]>([]);
   
@@ -190,8 +194,9 @@ const GiftCardManagement: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
-    // Clear selection when switching tabs
+    // Clear selections when switching tabs
     setSelectedParticipantIds([]);
+    setSelectedPoolCardIds([]);
     
     if (activeTab === 'pool') {
       fetchPoolData();
@@ -368,7 +373,7 @@ const GiftCardManagement: React.FC = () => {
     setShowBulkSendModal(true);
   };
 
-  const handleBulkSendGiftCards = async (cardType: string, cardValue: number, deliveryMethod: string) => {
+  const handleBulkSendGiftCards = async (_cardType: string, _cardValue: number, deliveryMethod: string) => {
     if (selectedParticipantIds.length === 0) {
       setMessage({ type: 'error', text: 'No participants selected' });
       return;
@@ -578,6 +583,65 @@ const GiftCardManagement: React.FC = () => {
     } catch (error: any) {
       console.error('Delete error details:', error);
       setMessage({ type: 'error', text: error.message || 'Failed to delete gift card' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pool card selection functions
+  const toggleSelectPoolCard = (cardId: string) => {
+    if (selectedPoolCardIds.includes(cardId)) {
+      setSelectedPoolCardIds(selectedPoolCardIds.filter(id => id !== cardId));
+    } else {
+      setSelectedPoolCardIds([...selectedPoolCardIds, cardId]);
+    }
+  };
+
+  const toggleSelectAllPoolCards = () => {
+    const allCardIds = poolCards.map(card => card.id);
+    const allSelected = allCardIds.every(id => selectedPoolCardIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedPoolCardIds([]);
+    } else {
+      setSelectedPoolCardIds(allCardIds);
+    }
+  };
+
+  // Bulk delete pool cards
+  const handleBulkDeletePoolCards = async () => {
+    if (selectedPoolCardIds.length === 0) return;
+
+    setLoading(true);
+    try {
+      const results = await Promise.all(
+        selectedPoolCardIds.map(async (id) => {
+          try {
+            await api.deleteGiftCardFromPool(id);
+            return { id, ok: true };
+          } catch (err: any) {
+            return { id, ok: false, error: err?.message || 'Failed' };
+          }
+        })
+      );
+
+      const successCount = results.filter(r => r.ok).length;
+      const failedCount = results.filter(r => !r.ok).length;
+
+      if (failedCount === 0) {
+        setMessage({ type: 'success', text: `Deleted ${successCount} gift card${successCount !== 1 ? 's' : ''} successfully!` });
+      } else {
+        setMessage({ type: 'error', text: `Deleted ${successCount}, failed ${failedCount}. Some cards may already be assigned.` });
+      }
+
+      setShowBulkDeletePoolModal(false);
+      setSelectedPoolCardIds([]);
+      
+      // Refresh the data
+      await fetchPoolStatus();
+      await fetchPoolData();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to delete gift cards' });
     } finally {
       setLoading(false);
     }
@@ -793,6 +857,19 @@ const GiftCardManagement: React.FC = () => {
                       </svg>
                       Upload CSV
                     </button>
+                    <button
+                      onClick={() => setShowBulkDeletePoolModal(true)}
+                      disabled={selectedPoolCardIds.length === 0}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm
+                        ${selectedPoolCardIds.length === 0 
+                          ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200' 
+                          : 'bg-white text-red-600 border border-red-300 hover:border-red-400 hover:bg-red-50 hover:shadow-md'}`}
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete Selected ({selectedPoolCardIds.length})
+                    </button>
                   </div>
                 </div>
 
@@ -814,6 +891,14 @@ const GiftCardManagement: React.FC = () => {
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 sticky top-0 z-10">
                           <tr>
+                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
+                              <input
+                                type="checkbox"
+                                checked={poolCards.length > 0 && poolCards.every(card => selectedPoolCardIds.includes(card.id))}
+                                onChange={toggleSelectAllPoolCards}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                            </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Card Code
                             </th>
@@ -846,6 +931,14 @@ const GiftCardManagement: React.FC = () => {
                         <tbody className="bg-white divide-y divide-gray-200">
                           {poolCards.map((card) => (
                             <tr key={card.id} className="hover:bg-gray-50 transition">
+                              <td className="px-3 py-4 whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPoolCardIds.includes(card.id)}
+                                  onChange={() => toggleSelectPoolCard(card.id)}
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                 {card.cardCode}
                               </td>
@@ -1116,7 +1209,7 @@ const GiftCardManagement: React.FC = () => {
                                   }}
                                   className="text-red-600 hover:text-red-900 font-medium"
                                 >
-                                  Unsend
+                                  Revoke
                                 </button>
                               </td>
                             </tr>
@@ -1824,6 +1917,47 @@ const GiftCardManagement: React.FC = () => {
                       <span>Send Gift Card</span>
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Pool Cards Modal */}
+      {showBulkDeletePoolModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start mb-5">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Gift Cards</h3>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to delete {selectedPoolCardIds.length} gift card{selectedPoolCardIds.length !== 1 ? 's' : ''} from the pool? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowBulkDeletePoolModal(false);
+                  }}
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDeletePoolCards}
+                  disabled={loading}
+                  className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors shadow-sm hover:shadow-md"
+                >
+                  {loading ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </div>

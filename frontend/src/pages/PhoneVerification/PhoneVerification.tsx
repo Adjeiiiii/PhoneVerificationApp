@@ -187,18 +187,15 @@ const PhoneVerification: React.FC = () => {
             // Check if it's a "no links available" error
             if (invitationData.error === 'no_links_available' || 
                 (invitationData.message && invitationData.message.includes('No survey links'))) {
-              setVerificationError(
-                'No survey links are currently available. Please contact the administrator at (240) 428-8442 or try again later.'
-              );
+              // Treat as a graceful completion: verification succeeds, but no link yet
+              setIsVerified(true);
+              setAssignedLink(''); // triggers the "no link available" success state UI
+              setStep('done');
+              setVerificationError('');
               showNotification(
-                'error', 
-                'No survey links available. Please contact the administrator or try again later.'
+                'info', 
+                'We have verified your number. No survey link is available right now. Our study team has been notified and will assign one to you shortly. We will notify you as soon as a link is available.'
               );
-              // Don't mark as verified - allow them to retry
-              // Clear the code so they can try again
-              setCodeDigits(Array(6).fill(''));
-              const firstBox = document.getElementById('otp-0') as HTMLInputElement;
-              if (firstBox) firstBox.focus();
             } else {
               setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
               showNotification('error', invitationData.message || 'Could not retrieve survey link. Please try again.');
@@ -652,16 +649,16 @@ const PhoneVerification: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-md">
+                <div className="bg-gray-50 border-l-4 border-gray-400 p-5 rounded-lg">
                   <div className="flex">
                     <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg className="h-6 w-6 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                       </svg>
                     </div>
                     <div className="ml-3">
-                      <p className="text-sm text-yellow-700">
-                        Your phone has been verified, but no survey link was available at this time. Please contact support at <a href="mailto:ai@networks.howard.edu" className="underline text-blue-700">ai@networks.howard.edu</a>.
+                      <p className="text-base text-gray-800 leading-relaxed">
+                        Your phone number is verified. A survey link is not available right now. Our study team has been notified and will assign one to you shortly. We will notify you as soon as a link is available.
                       </p>
                     </div>
                   </div>

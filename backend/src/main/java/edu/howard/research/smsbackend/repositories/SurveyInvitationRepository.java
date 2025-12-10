@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -67,4 +68,9 @@ public interface SurveyInvitationRepository extends JpaRepository<SurveyInvitati
      * Count invitations by participant ID
      */
     long countByParticipantId(UUID participantId);
+
+    /**
+     * Find all invitations for a participant
+     */
+    List<SurveyInvitation> findByParticipantId(UUID participantId);
 }

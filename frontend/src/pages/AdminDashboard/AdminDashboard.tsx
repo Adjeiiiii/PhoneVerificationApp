@@ -83,6 +83,7 @@ const AdminDashboard: React.FC = () => {
     const lowerMessage = message.toLowerCase();
     return lowerMessage.includes('successfully') || 
            lowerMessage.includes('success') ||
+           lowerMessage.includes('copied') ||
            lowerMessage.includes('reminder sent') ||
            lowerMessage.includes('reminders sent') ||
            (lowerMessage.includes('completed') && !lowerMessage.includes('error')) ||
@@ -964,25 +965,25 @@ const AdminDashboard: React.FC = () => {
                                       Edit Details
                                     </button>
                                     {r.short_link && (
-                                      <button
-                                        onClick={() => {
+                                    <button
+                                      onClick={() => {
                                           navigator.clipboard.writeText(r.short_link!);
                                           setBulkActionMessage('Short link copied to clipboard!');
                                           setTimeout(() => setBulkActionMessage(''), 3000);
-                                          setActiveActionMenu(null);
-                                        }}
+                                        setActiveActionMenu(null);
+                                      }}
                                         className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                                        role="menuitem"
-                                      >
+                                      role="menuitem"
+                                    >
                                         <svg className="mr-3 h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
+                                      </svg>
                                         Copy Short Link
-                                      </button>
+                                    </button>
                                     )}
                                     {r.assigned_link && (
-                                      <button
-                                        onClick={() => {
+                                    <button
+                                      onClick={() => {
                                           navigator.clipboard.writeText(r.assigned_link!);
                                           setBulkActionMessage('Long link copied to clipboard!');
                                           setTimeout(() => setBulkActionMessage(''), 3000);
@@ -1569,7 +1570,7 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-sm text-gray-600">
                     Are you sure you want to delete {selectedRecordIds.length}{' '}
                     {selectedRecordIds.length > 1 ? 'participants' : 'participant'}? This action cannot be undone.
-                  </p>
+            </p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
@@ -1606,7 +1607,7 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-sm text-gray-600">
                     Are you sure you want to send reminders to {selectedRecordIds.length}{' '}
                     {selectedRecordIds.length > 1 ? 'participants' : 'participant'}?
-                  </p>
+            </p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
@@ -1645,7 +1646,7 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-sm text-gray-600">
                     Update survey status for {selectedRecordIds.length}{' '}
                     {selectedRecordIds.length > 1 ? 'participants' : 'participant'}
-                  </p>
+            </p>
                 </div>
               </div>
               

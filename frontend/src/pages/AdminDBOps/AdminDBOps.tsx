@@ -18,19 +18,9 @@ type FilterOption = 'all' | 'used' | 'unused';
 const AdminDBOps: React.FC = () => {
   const navigate = useNavigate();
 
-  // Try to load from cache first for instant display
-  const getInitialLinks = (): LinkRecord[] => {
-    try {
-      const cached = sessionStorage.getItem('adminDBOps_links');
-      return cached ? JSON.parse(cached) : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const [links, setLinks] = useState<LinkRecord[]>(getInitialLinks());
-  const [loading, setLoading] = useState(getInitialLinks().length === 0);
-  const [isInitialLoad, setIsInitialLoad] = useState(getInitialLinks().length === 0);
+  const [links, setLinks] = useState<LinkRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // For multiple select
   const [selectedLinkIds, setSelectedLinkIds] = useState<string[]>([]);
@@ -70,6 +60,8 @@ const AdminDBOps: React.FC = () => {
 
   // Dummy notifications: track the number of links when last seen
   const [lastSeenCount, setLastSeenCount] = useState<number>(0);
+  // Safety timeout to avoid indefinite spinner if a request fails silently
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Add new state for CSV upload modal
   const [showCsvUploadModal, setShowCsvUploadModal] = useState(false);
@@ -88,30 +80,28 @@ const AdminDBOps: React.FC = () => {
       navigate('/admin-login');
       return;
     }
-    
-    // Check if we have cached data
-    const cachedData = sessionStorage.getItem('adminDBOps_links');
-    if (cachedData) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        setLinks(parsed);
-        setLoading(false);
-        setIsInitialLoad(false);
-        // Still fetch fresh data in background
-        fetchLinks(token);
-        return;
-      } catch (e) {
-        // Invalid cache, continue with normal load
-      }
-    }
-    
-    // Only set loading if we don't have data yet
-    if (links.length === 0) {
-      setLoading(true);
-      setIsInitialLoad(true);
-    }
+
+    setLoading(true);
+    setIsInitialLoad(true);
     fetchLinks(token);
   }, [navigate]);
+
+  // Fallback: if still loading on initial load after 6s, stop spinner and show empty state
+  useEffect(() => {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+    if (loading && isInitialLoad) {
+      loadTimeoutRef.current = setTimeout(() => {
+        setLoading(false);
+        setIsInitialLoad(false);
+      }, 6000);
+    }
+    return () => {
+      if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+    };
+  }, [loading, isInitialLoad]);
 
   // Helper function to fetch all pages of data
   const fetchAllPages = async (endpoint: string, token: string, pageSize: number = 200): Promise<any[]> => {
@@ -138,6 +128,7 @@ const AdminDBOps: React.FC = () => {
   };
 
   const fetchLinks = (token: string) => {
+    setLoading(true);
     // Fetch both links and invitations to determine actual usage
     // Fetch all pages to ensure we get all data, even if there are more than 200 items
     Promise.all([
@@ -209,16 +200,19 @@ const AdminDBOps: React.FC = () => {
           console.log(`Total links: ${convertedLinks.length}, Used links: ${usedCount}`);
           console.log('Used links details:', convertedLinks.filter((l: LinkRecord) => l.used));
           setLinks(convertedLinks);
-          setLoading(false);
-          setIsInitialLoad(false);
-          // Cache the data for smooth navigation
-          sessionStorage.setItem('adminDBOps_links', JSON.stringify(convertedLinks));
+          
           // On first load, initialize lastSeenCount
           if (lastSeenCount === 0) setLastSeenCount(convertedLinks.length);
+        } else {
+          setLinks([]);
         }
+        
+        setLoading(false);
+        setIsInitialLoad(false);
       })
       .catch((err) => {
         console.error('Error fetching links:', err);
+        setActionMessage(err?.message || 'Failed to load links.');
         setLoading(false);
         setIsInitialLoad(false);
       });
@@ -287,11 +281,9 @@ const AdminDBOps: React.FC = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          setLinks((prev) =>
-            prev.map((ln) => (ln.id === editLink.id ? { ...ln, link: editLink.link } : ln))
-          );
           closeEditModal();
           setActionMessage('Link updated successfully');
+          fetchLinks(token);
         } else {
           setActionMessage(data.error || 'Could not update link');
         }
@@ -324,7 +316,7 @@ const AdminDBOps: React.FC = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          setLinks((prev) => prev.filter((l) => l.id !== deleteTarget.id));
+          fetchLinks(token);
         } else {
           alert(data.error || 'Cannot delete link');
         }
@@ -463,29 +455,61 @@ const AdminDBOps: React.FC = () => {
     }
   };
 
-  // Bulk delete function
-  const handleBulkDelete = () => {
+  // Bulk delete function with per-link error handling
+  const handleBulkDelete = async () => {
     const token = localStorage.getItem('adminToken');
     if (!token || selectedLinkIds.length === 0) return;
 
-    Promise.all(
-      selectedLinkIds.map(id =>
-        fetch(`/api/admin/delete-link/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` }
-        }).then(res => res.json())
-      )
-    )
-      .then(() => {
-        setLinks(prev => prev.filter(l => !selectedLinkIds.includes(l.id)));
-        setSelectedLinkIds([]);
-        setShowBulkDeleteModal(false);
-        setActionMessage('Selected links deleted successfully');
-      })
-      .catch(err => {
-        console.error('Bulk delete error:', err);
-        setActionMessage('Failed to delete some links');
-      });
+    try {
+      const results = await Promise.all(
+        selectedLinkIds.map(async (id) => {
+          try {
+            const res = await fetch(`/api/admin/delete-link/${id}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const data = await res.json().catch(() => ({}));
+            const ok = res.ok && (data.success !== false) && !data.error;
+
+            return {
+              id,
+              ok,
+              status: res.status,
+              error: data.error || data.message || (!res.ok ? res.statusText : '')
+            };
+          } catch (err: any) {
+            return { id, ok: false, status: 0, error: err?.message || 'Network error' };
+          }
+        })
+      );
+
+      const successfulIds = results.filter(r => r.ok).map(r => r.id);
+      const failed = results.filter(r => !r.ok);
+
+      if (successfulIds.length > 0) {
+        setLinks(prev => prev.filter(l => !successfulIds.includes(l.id)));
+      }
+
+      setSelectedLinkIds([]);
+      setShowBulkDeleteModal(false);
+
+      // Always refresh from server after bulk delete to stay in sync
+      await fetchLinks(token);
+
+      if (failed.length === 0) {
+        setActionMessage(`Deleted ${successfulIds.length} link${successfulIds.length !== 1 ? 's' : ''} successfully.`);
+      } else {
+        const first = failed[0];
+        const notFound = failed.some(f => f.status === 404);
+        const sampleError = first.error || 'Failed to delete some links.';
+        const suffix = notFound ? ' Some selected links no longer exist. The list has been refreshed.' : '';
+        setActionMessage(`Deleted ${successfulIds.length}, failed ${failed.length}. ${sampleError}${suffix}`);
+      }
+    } catch (err) {
+      console.error('Bulk delete error:', err);
+      setActionMessage('Failed to delete links. Please try again.');
+    }
   };
 
   // Pagination functions
@@ -519,6 +543,7 @@ const AdminDBOps: React.FC = () => {
       </AdminLayout>
     );
   }
+
 
 
   return (

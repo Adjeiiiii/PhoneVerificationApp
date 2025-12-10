@@ -24,7 +24,6 @@ public interface ParticipantRepository extends JpaRepository<Participant, UUID> 
         AND NOT EXISTS (
             SELECT 1 FROM SurveyInvitation si
             WHERE si.participant = p
-            AND si.completedAt IS NULL
         )
         ORDER BY p.verifiedAt DESC NULLS LAST, p.createdAt DESC
     """)
