@@ -1,6 +1,7 @@
 package edu.howard.research.smsbackend.controllers;
 
 import edu.howard.research.smsbackend.models.dto.*;
+import edu.howard.research.smsbackend.models.entities.PoolStatus;
 import edu.howard.research.smsbackend.models.entities.GiftCardStatus;
 import edu.howard.research.smsbackend.security.JwtAuthenticationFilter;
 import edu.howard.research.smsbackend.services.GiftCardService;
@@ -18,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -124,12 +126,13 @@ public class AdminGiftCardController {
     }
 
     /**
-     * Upload gift cards from CSV
+     * Upload gift card codes from file (one code per line)
+     * Simplified format: just codes, no additional fields required
      */
     @PostMapping("/pool/upload")
     public ResponseEntity<UploadResultDto> uploadGiftCards(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("batchLabel") String batchLabel
+            @RequestParam(value = "batchLabel", required = false) String batchLabel
     ) {
         String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
         
@@ -173,6 +176,28 @@ public class AdminGiftCardController {
     }
 
     /**
+     * Get gift cards from pool with optional status filter
+     */
+    @GetMapping("/pool")
+    public ResponseEntity<Page<GiftCardPoolDto>> getGiftCardsFromPool(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
+        PoolStatus poolStatus = null;
+        if (status != null && !status.isEmpty()) {
+            try {
+                poolStatus = PoolStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+        Page<GiftCardPoolDto> giftCards = giftCardService.getGiftCardsFromPool(poolStatus, pageable);
+        return ResponseEntity.ok(giftCards);
+    }
+
+    /**
      * Get gift cards by batch
      */
     @GetMapping("/pool/batch/{batchLabel}")
@@ -209,6 +234,34 @@ public class AdminGiftCardController {
         Pageable pageable = PageRequest.of(page, size);
         Page<UnsentGiftCardDto> unsentGiftCards = giftCardService.getUnsentGiftCards(pageable);
         return ResponseEntity.ok(unsentGiftCards);
+    }
+
+    /**
+     * Check if an invitation has a gift card
+     */
+    @GetMapping("/check-invitation/{invitationId}")
+    public ResponseEntity<Map<String, Object>> checkGiftCardForInvitation(@PathVariable UUID invitationId) {
+        boolean hasGiftCard = giftCardService.hasGiftCardForInvitation(invitationId);
+        return ResponseEntity.ok(Map.of("hasGiftCard", hasGiftCard));
+    }
+
+    /**
+     * Update gift card in pool
+     */
+    @PutMapping("/pool/{poolId}")
+    public ResponseEntity<GiftCardPoolDto> updateGiftCardInPool(
+            @PathVariable UUID poolId,
+            @Valid @RequestBody UpdateGiftCardRequest request
+    ) {
+        try {
+            String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
+            
+            GiftCardPoolDto updatedCard = giftCardService.updateGiftCardInPool(poolId, request, adminUsername);
+            return ResponseEntity.ok(updatedCard);
+        } catch (Exception e) {
+            log.error("Error updating gift card in pool: {}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     /**

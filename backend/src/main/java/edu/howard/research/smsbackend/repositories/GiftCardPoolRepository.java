@@ -32,6 +32,18 @@ public interface GiftCardPoolRepository extends JpaRepository<GiftCardPool, UUID
     Page<GiftCardPool> findAvailable(Pageable pageable);
 
     /**
+     * Find gift cards by status
+     */
+    @Query("SELECT gcp FROM GiftCardPool gcp WHERE gcp.status = :status ORDER BY gcp.uploadedAt DESC")
+    Page<GiftCardPool> findByStatus(@Param("status") PoolStatus status, Pageable pageable);
+
+    /**
+     * Find all gift cards (no status filter)
+     */
+    @Query("SELECT gcp FROM GiftCardPool gcp ORDER BY gcp.uploadedAt DESC")
+    Page<GiftCardPool> findAllOrdered(Pageable pageable);
+
+    /**
      * Find available gift cards by batch label
      */
     @Query("SELECT gcp FROM GiftCardPool gcp WHERE gcp.status = 'AVAILABLE' AND gcp.batchLabel = :batchLabel ORDER BY gcp.uploadedAt ASC")

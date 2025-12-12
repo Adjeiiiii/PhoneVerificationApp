@@ -18,6 +18,7 @@ const PhoneVerification: React.FC = () => {
 
   const [showUsedModal, setShowUsedModal] = useState(false);
   const [resendResult, setResendResult] = useState('');
+  const [resendHadLink, setResendHadLink] = useState(false);
 
   const [assignedLink, setAssignedLink] = useState('');
 
@@ -174,36 +175,28 @@ const PhoneVerification: React.FC = () => {
           const invitationData = await api.sendSurveyInvitation(phoneNumber);
           
           if (invitationData.ok) {
-            setIsVerified(true);
-            setAssignedLink(invitationData.linkUrl || '');
-            setStep('done');
-            showNotification('success', 'Verification successful! Your survey link is ready.');
-            
-            // Survey link is automatically sent via SMS by the backend
             if (invitationData.linkUrl) {
-              showNotification('success', 'Survey link sent via SMS!');
-            }
-          } else {
-            // Check if it's a "no links available" error
-            if (invitationData.error === 'no_links_available' || 
-                (invitationData.message && invitationData.message.includes('No survey links'))) {
-              // Treat as a graceful completion: verification succeeds, but no link yet
+              // Success - link was assigned and sent
               setIsVerified(true);
-              setAssignedLink(''); // triggers the "no link available" success state UI
+              setAssignedLink(invitationData.linkUrl);
+              setStep('done');
+              showNotification('success', 'Verification successful! Your survey link is ready.');
+              showNotification('success', 'Survey link sent via SMS!');
+            } else {
+              // Verified but no links available right now
+              setIsVerified(true);
+              setAssignedLink(''); // triggers the "no link available" UI
               setStep('done');
               setVerificationError('');
-              showNotification(
-                'info', 
-                'We have verified your number. No survey link is available right now. Our study team has been notified and will assign one to you shortly. We will notify you as soon as a link is available.'
-              );
-            } else {
-              setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
-              showNotification('error', invitationData.message || 'Could not retrieve survey link. Please try again.');
-              // Don't mark as verified if link assignment failed
-              setCodeDigits(Array(6).fill(''));
-              const firstBox = document.getElementById('otp-0') as HTMLInputElement;
-              if (firstBox) firstBox.focus();
+              showNotification('info', invitationData.message || 'Verified! A survey link will be assigned shortly.');
             }
+          } else {
+            // Actual error
+            setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
+            showNotification('error', invitationData.message || 'Could not retrieve survey link. Please try again.');
+            setCodeDigits(Array(6).fill(''));
+            const firstBox = document.getElementById('otp-0') as HTMLInputElement;
+            if (firstBox) firstBox.focus();
           }
         } catch (invitationError: any) {
           console.error('Survey invitation error:', invitationError);
@@ -244,17 +237,36 @@ const PhoneVerification: React.FC = () => {
   // ----------------------
   const handleResendLink = async () => {
     setResendResult('');
+    setResendHadLink(false);
     setIsLoading(true);
     
     try {
       console.log('Resending link for phone:', phoneNumber);
       const data = await api.sendSurveyInvitation(phoneNumber);
       console.log('API response:', data);
-      setResendResult(data.message || 'Survey link sent successfully!');
+      
+      if (data.ok) {
+        if (data.linkUrl) {
+          // Success - link was sent
+          setResendHadLink(true);
+          setResendResult(data.message || 'Survey link sent successfully!');
+          showNotification('success', 'Survey link sent successfully!');
+        } else {
+          // Verified but no links available
+          setResendHadLink(false);
+          setResendResult(data.message || 'Verified! A survey link will be assigned shortly.');
+          showNotification('info', 'No survey links currently available. You will be notified when one is assigned.');
+        }
+      } else {
+        // Actual error
+        setResendHadLink(false);
+        setResendResult(data.message || data.error || 'Failed to resend survey link.');
+        showNotification('error', data.message || 'Failed to resend survey link');
+      }
       setShowUsedModal(false);
-      showNotification('success', 'Survey link sent successfully!');
     } catch (err: any) {
       console.error('Resend link error:', err);
+      setResendHadLink(false);
       setResendResult('Server error: ' + (err.message || 'Failed to resend link'));
       showNotification('error', 'Failed to resend survey link');
     } finally {
@@ -535,35 +547,72 @@ const PhoneVerification: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-t-xl px-6 py-4">
-                    <h3 className="text-xl font-bold text-white">Link Sent Successfully</h3>
-                  </div>
-                  <div className="p-6">
-                    <div className="bg-green-50 rounded-lg p-4 mb-6">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <div className="ml-3">
-                          <p className="text-sm text-green-700">{resendResult}</p>
-                        </div>
+                  {/* Dynamic styling based on whether a link was sent */}
+                  {resendHadLink ? (
+                    <>
+                      <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-t-xl px-6 py-4">
+                        <h3 className="text-xl font-bold text-white">Link Sent Successfully</h3>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="w-full px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg 
-                        hover:from-green-600 hover:to-green-700 transition-colors focus:outline-none focus:ring-2 
-                        focus:ring-green-500 focus:ring-offset-2"
-                      onClick={() => {
-                        setShowUsedModal(false);
-                        navigate('/');
-                      }}
-                    >
-                      Done
-                    </button>
-                  </div>
+                      <div className="p-6">
+                        <div className="bg-green-50 rounded-lg p-4 mb-6">
+                          <div className="flex">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div className="ml-3">
+                              <p className="text-sm text-green-700">{resendResult}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg 
+                            hover:from-green-600 hover:to-green-700 transition-colors focus:outline-none focus:ring-2 
+                            focus:ring-green-500 focus:ring-offset-2"
+                          onClick={() => {
+                            setShowUsedModal(false);
+                            navigate('/');
+                          }}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-xl px-6 py-4">
+                        <h3 className="text-xl font-bold text-white">Verification Confirmed</h3>
+                      </div>
+                      <div className="p-6">
+                        <div className="bg-blue-50 rounded-lg p-4 mb-6">
+                          <div className="flex">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div className="ml-3">
+                              <p className="text-sm text-blue-700">{resendResult}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg 
+                            hover:from-blue-600 hover:to-blue-700 transition-colors focus:outline-none focus:ring-2 
+                            focus:ring-blue-500 focus:ring-offset-2"
+                          onClick={() => {
+                            setShowUsedModal(false);
+                            navigate('/');
+                          }}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>

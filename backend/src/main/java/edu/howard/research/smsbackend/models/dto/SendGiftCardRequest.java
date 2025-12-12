@@ -20,17 +20,16 @@ public class SendGiftCardRequest {
     @NotNull(message = "Invitation ID is required")
     private UUID invitationId;
     
-    @NotNull(message = "Card type is required")
+    // Optional - will be auto-selected from pool if not provided
     private GiftCardType cardType;
     
-    @NotNull(message = "Card value is required")
-    @DecimalMin(value = "0.01", message = "Card value must be greater than 0")
+    // Optional - will be auto-selected from pool if not provided
     private BigDecimal cardValue;
     
-    @NotBlank(message = "Card code is required")
+    // Optional - will be auto-selected from pool if not provided
     private String cardCode;
     
-    @NotBlank(message = "Redemption URL is required")
+    // Optional - will be auto-selected from pool if not provided
     private String redemptionUrl;
     
     private String redemptionInstructions;
@@ -39,9 +38,14 @@ public class SendGiftCardRequest {
     
     private String notes;
     
+    @NotBlank(message = "Delivery method is required")
     private String deliveryMethod; // "EMAIL", "SMS", "BOTH"
     
-    private String source = "MANUAL"; // "POOL" or "MANUAL"
+    // Deprecated - cards are now always selected from pool automatically
+    @Deprecated
+    private String source = "POOL";
     
-    private UUID poolId; // if source is "POOL"
+    // Deprecated - pool card is now selected automatically
+    @Deprecated
+    private UUID poolId;
 }

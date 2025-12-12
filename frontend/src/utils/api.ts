@@ -319,6 +319,11 @@ export const api = {
     return api.get(`/api/admin/gift-cards/pool/available?page=${page}&size=${size}`);
   },
 
+  getGiftCardsFromPool: async (status: string | null, page = 0, size = 100) => {
+    const statusParam = status ? `&status=${status}` : '';
+    return api.get(`/api/admin/gift-cards/pool?page=${page}&size=${size}${statusParam}`);
+  },
+
   getEligibleParticipants: async () => {
     return api.get('/api/admin/gift-cards/eligible');
   },
@@ -341,10 +346,12 @@ export const api = {
     return api.post('/api/admin/gift-cards/pool/add', giftCard);
   },
 
-  uploadGiftCards: async (file: File, batchLabel: string) => {
+  uploadGiftCards: async (file: File, batchLabel?: string) => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('batchLabel', batchLabel);
+    if (batchLabel) {
+      formData.append('batchLabel', batchLabel);
+    }
     
     const token = localStorage.getItem('adminToken');
     const headers: any = {};
@@ -370,6 +377,10 @@ export const api = {
 
   addGiftCardNotes: async (giftCardId: string, notes: string) => {
     return api.post(`/api/admin/gift-cards/${giftCardId}/notes`, { notes });
+  },
+
+  updateGiftCardInPool: async (poolId: string, cardCode: string) => {
+    return api.put(`/api/admin/gift-cards/pool/${poolId}`, { cardCode });
   },
 
   deleteGiftCardFromPool: async (poolId: string) => {
@@ -403,6 +414,10 @@ export const api = {
 
   bulkMarkSurveysUncompleted: async (invitationIds: string[]) => {
     return api.post('/api/admin/invitations/bulk-uncomplete', invitationIds);
+  },
+
+  checkGiftCardForInvitation: async (invitationId: string) => {
+    return api.get(`/api/admin/gift-cards/check-invitation/${invitationId}`);
   },
 
   // User deletion API calls

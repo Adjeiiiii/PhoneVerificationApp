@@ -89,6 +89,11 @@ public interface GiftCardService {
     Page<GiftCardPoolDto> getAvailableGiftCards(Pageable pageable);
 
     /**
+     * Get gift cards from pool by status (null = all statuses)
+     */
+    Page<GiftCardPoolDto> getGiftCardsFromPool(edu.howard.research.smsbackend.models.entities.PoolStatus status, Pageable pageable);
+
+    /**
      * Get gift cards by batch
      */
     Page<GiftCardPoolDto> getGiftCardsByBatch(String batchLabel, Pageable pageable);
@@ -97,6 +102,11 @@ public interface GiftCardService {
      * Export used gift cards
      */
     byte[] exportUsedGiftCards();
+
+    /**
+     * Update gift card in pool
+     */
+    GiftCardPoolDto updateGiftCardInPool(UUID poolId, UpdateGiftCardRequest request, String adminUsername);
 
     /**
      * Delete gift card from pool (for cards never sent to users)
@@ -112,4 +122,9 @@ public interface GiftCardService {
      * Get unsent gift cards history
      */
     Page<UnsentGiftCardDto> getUnsentGiftCards(Pageable pageable);
+
+    /**
+     * Check if an invitation has a gift card
+     */
+    boolean hasGiftCardForInvitation(UUID invitationId);
 }
