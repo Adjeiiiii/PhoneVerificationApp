@@ -90,6 +90,10 @@ const GiftCardManagement: React.FC = () => {
   // Pool status and cards
   const [poolStatus, setPoolStatus] = useState<GiftCardPoolStatus | null>(null);
   const [poolCards, setPoolCards] = useState<GiftCardPool[]>([]);
+  const [poolSearch, setPoolSearch] = useState<string>('');
+  const [poolPage, setPoolPage] = useState<number>(0);
+  const [poolPageSize, setPoolPageSize] = useState<number>(20);
+  const [poolTotalPages, setPoolTotalPages] = useState<number>(0);
   const [poolStatusFilter, setPoolStatusFilter] = useState<string>('ALL'); // 'ALL', 'AVAILABLE', 'ASSIGNED', 'EXPIRED', 'INVALID'
   
   // Eligible participants
@@ -251,6 +255,14 @@ const GiftCardManagement: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, poolStatusFilter]);
 
+  // Refetch pool data when filters/pagination change while on pool tab
+  useEffect(() => {
+    if (activeTab === 'pool') {
+      fetchPoolData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolStatusFilter, poolPage, poolPageSize, poolSearch]);
+
   const fetchData = async () => {
     await Promise.all([
       fetchPoolStatus(),
@@ -272,8 +284,9 @@ const GiftCardManagement: React.FC = () => {
   const fetchPoolData = async () => {
     try {
       const status = poolStatusFilter === 'ALL' ? null : poolStatusFilter;
-      const response = await api.getGiftCardsFromPool(status, 0, 100);
+      const response = await api.getGiftCardsFromPool(status, poolPage, poolPageSize, poolSearch.trim() || undefined);
       setPoolCards(response.content || []);
+      setPoolTotalPages(response.totalPages ?? 0);
     } catch (error) {
       console.error('Error fetching pool cards:', error);
     }
@@ -1044,10 +1057,10 @@ const GiftCardManagement: React.FC = () => {
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex justify-between items-center mb-6 flex-shrink-0">
                   <div className="flex items-center gap-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Gift Card Pool</h2>
+                    <h2 className="text-xl font-semibold text-gray-900">Gift Card Pool</h2>
                     <select
                       value={poolStatusFilter}
-                      onChange={(e) => setPoolStatusFilter(e.target.value)}
+                      onChange={(e) => { setPoolStatusFilter(e.target.value); setPoolPage(0); }}
                       className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="ALL">All Statuses</option>
@@ -1056,6 +1069,21 @@ const GiftCardManagement: React.FC = () => {
                       <option value="EXPIRED">Expired</option>
                       <option value="INVALID">Invalid</option>
                     </select>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={poolSearch}
+                        onChange={(e) => { setPoolSearch(e.target.value); setPoolPage(0); }}
+                        placeholder="Search code"
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <button
+                        onClick={() => { setPoolPage(0); fetchPoolData(); }}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        Search
+                      </button>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <button
@@ -1259,6 +1287,37 @@ const GiftCardManagement: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                    <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
+                      <div className="text-sm text-gray-600">
+                        Page {poolPage + 1} of {poolTotalPages || 1}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setPoolPage(Math.max(poolPage - 1, 0))}
+                          disabled={poolPage === 0}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() => setPoolPage(poolPage + 1)}
+                          disabled={poolTotalPages && poolPage + 1 >= poolTotalPages}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                        <select
+                          value={poolPageSize}
+                          onChange={(e) => { setPoolPageSize(parseInt(e.target.value, 10)); setPoolPage(0); }}
+                          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

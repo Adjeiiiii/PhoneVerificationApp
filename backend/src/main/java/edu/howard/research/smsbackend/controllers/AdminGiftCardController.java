@@ -181,6 +181,7 @@ public class AdminGiftCardController {
     @GetMapping("/pool")
     public ResponseEntity<Page<GiftCardPoolDto>> getGiftCardsFromPool(
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String code,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
@@ -193,7 +194,7 @@ public class AdminGiftCardController {
                 return ResponseEntity.badRequest().build();
             }
         }
-        Page<GiftCardPoolDto> giftCards = giftCardService.getGiftCardsFromPool(poolStatus, pageable);
+        Page<GiftCardPoolDto> giftCards = giftCardService.getGiftCardsFromPool(poolStatus, code, pageable);
         return ResponseEntity.ok(giftCards);
     }
 

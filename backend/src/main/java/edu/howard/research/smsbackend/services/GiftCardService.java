@@ -89,9 +89,9 @@ public interface GiftCardService {
     Page<GiftCardPoolDto> getAvailableGiftCards(Pageable pageable);
 
     /**
-     * Get gift cards from pool by status (null = all statuses)
+     * Get gift cards from pool by status and optional code search (null = no filter)
      */
-    Page<GiftCardPoolDto> getGiftCardsFromPool(edu.howard.research.smsbackend.models.entities.PoolStatus status, Pageable pageable);
+    Page<GiftCardPoolDto> getGiftCardsFromPool(edu.howard.research.smsbackend.models.entities.PoolStatus status, String code, Pageable pageable);
 
     /**
      * Get gift cards by batch

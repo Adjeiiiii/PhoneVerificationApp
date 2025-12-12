@@ -489,13 +489,8 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
-    public Page<GiftCardPoolDto> getGiftCardsFromPool(PoolStatus status, Pageable pageable) {
-        Page<GiftCardPool> poolCards;
-        if (status == null) {
-            poolCards = giftCardPoolRepository.findAllOrdered(pageable);
-        } else {
-            poolCards = giftCardPoolRepository.findByStatus(status, pageable);
-        }
+    public Page<GiftCardPoolDto> getGiftCardsFromPool(PoolStatus status, String code, Pageable pageable) {
+        Page<GiftCardPool> poolCards = giftCardPoolRepository.findByStatusAndCode(status, code, pageable);
         return poolCards.map(this::convertPoolToDto);
     }
 
