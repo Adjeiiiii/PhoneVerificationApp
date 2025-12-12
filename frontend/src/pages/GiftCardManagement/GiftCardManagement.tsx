@@ -1057,19 +1057,24 @@ const GiftCardManagement: React.FC = () => {
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex justify-between items-center mb-6 flex-shrink-0">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-xl font-semibold text-gray-900">Gift Card Pool</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">Gift Card Pool</h2>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <select
-                        value={poolStatusFilter}
-                        onChange={(e) => { setPoolStatusFilter(e.target.value); setPoolPage(0); }}
-                        className="h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="ALL">All Statuses</option>
-                        <option value="AVAILABLE">Available</option>
-                        <option value="ASSIGNED">Assigned</option>
-                        <option value="EXPIRED">Expired</option>
-                        <option value="INVALID">Invalid</option>
-                      </select>
+                      <div className="relative">
+                        <select
+                          value={poolStatusFilter}
+                          onChange={(e) => { setPoolStatusFilter(e.target.value); setPoolPage(0); }}
+                          className="h-10 pl-3 pr-10 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                        >
+                          <option value="ALL">All Statuses</option>
+                          <option value="AVAILABLE">Available</option>
+                          <option value="ASSIGNED">Assigned</option>
+                          <option value="EXPIRED">Expired</option>
+                          <option value="INVALID">Invalid</option>
+                        </select>
+                        <svg className="pointer-events-none w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                       <input
                         type="text"
                         value={poolSearch}
@@ -1236,8 +1241,8 @@ const GiftCardManagement: React.FC = () => {
                                         </svg>
                                         <span>Copy Code</span>
                                       </button>
-                                      <button
-                                        onClick={() => {
+                            <button
+                              onClick={() => {
                                           if (card.status !== 'ASSIGNED') {
                                             handleEditCard(card);
                                           }
@@ -1259,8 +1264,8 @@ const GiftCardManagement: React.FC = () => {
                                       <button
                                         onClick={() => {
                                           if (card.status !== 'ASSIGNED') {
-                                            setSelectedItem(card);
-                                            setShowDeleteModal(true);
+                                setSelectedItem(card);
+                                setShowDeleteModal(true);
                                             setOpenActionMenuId(null);
                                           }
                                         }}
@@ -1276,7 +1281,7 @@ const GiftCardManagement: React.FC = () => {
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                         <span>Delete</span>
-                                      </button>
+                            </button>
                                     </div>,
                                     document.body
                                   )}
@@ -1306,16 +1311,21 @@ const GiftCardManagement: React.FC = () => {
                         >
                           Next
                         </button>
-                        <select
-                          value={poolPageSize}
-                          onChange={(e) => { setPoolPageSize(parseInt(e.target.value, 10)); setPoolPage(0); }}
-                          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value={10}>10</option>
-                          <option value={20}>20</option>
-                          <option value={50}>50</option>
-                          <option value={100}>100</option>
-                        </select>
+                        <div className="relative">
+                          <select
+                            value={poolPageSize}
+                            onChange={(e) => { setPoolPageSize(parseInt(e.target.value, 10)); setPoolPage(0); }}
+                            className="h-9 pl-3 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                          >
+                            <option value={10}>10</option>
+                            <option value={20}>20</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                          </select>
+                          <svg className="pointer-events-none w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
                   </div>
