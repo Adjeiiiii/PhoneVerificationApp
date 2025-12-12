@@ -82,8 +82,12 @@ const Survey: React.FC = () => {
   // ----------------------
   // "Used" modal logic
   // ----------------------
+  // Track whether the last resend had a link or not (for styling the result modal)
+  const [resendHadLink, setResendHadLink] = useState(false);
+
   const handleUsedResendLink = async () => {
     setUsedResendInfo('');
+    setResendHadLink(false);
     try {
       // Ensure we have a valid phone number before sending
       if (!phoneNumber || !isPhoneNumberValid(phoneNumber)) {
@@ -93,14 +97,28 @@ const Survey: React.FC = () => {
       }
       
       console.log('Resending link for phone:', phoneNumber);
-      console.log('Phone number length:', phoneNumber.length);
-      console.log('Phone number digits only:', phoneNumber.replace(/\D/g, ''));
       const data = await api.sendSurveyInvitation(phoneNumber);
       console.log('API response:', data);
-      setUsedResendInfo(data.message || 'Survey link sent successfully!');
+      
+      if (data.ok) {
+        if (data.linkUrl) {
+          // Success - link was sent
+          setResendHadLink(true);
+          setUsedResendInfo(data.message || 'Survey link sent successfully!');
+        } else {
+          // Verified but no links available
+          setResendHadLink(false);
+          setUsedResendInfo(data.message || 'Verified! A survey link will be assigned shortly.');
+        }
+      } else {
+        // Actual error
+        setResendHadLink(false);
+        setUsedResendInfo(data.message || data.error || 'Failed to resend survey link.');
+      }
       setUsedStage('success');
     } catch (err: any) {
       console.error('Resend link error:', err);
+      setResendHadLink(false);
       setUsedResendInfo('Server error: ' + (err.message || 'Failed to resend link'));
       setUsedStage('success');
     }
@@ -628,31 +646,64 @@ const Survey: React.FC = () => {
               </>
             ) : (
               <>
-                <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-t-xl px-6 py-4">
-                  <h3 className="text-xl font-bold text-white">Link Sent Successfully</h3>
-                </div>
-                <div className="p-6">
-                  <div className="bg-green-50 rounded-lg p-4 mb-6">
-                    <div className="flex">
-                      <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm text-green-700">{usedResendInfo}</p>
-                      </div>
+                {/* Dynamic styling based on whether a link was sent */}
+                {resendHadLink ? (
+                  <>
+                    <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-t-xl px-6 py-4">
+                      <h3 className="text-xl font-bold text-white">Link Sent Successfully</h3>
                     </div>
-                  </div>
-                  <button
-                    className="w-full px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg 
-                      hover:from-green-600 hover:to-green-700 transition-colors focus:outline-none focus:ring-2 
-                      focus:ring-green-500 focus:ring-offset-2"
-                    onClick={handleUsedClose}
-                  >
-                    Close
-                  </button>
-                </div>
+                    <div className="p-6">
+                      <div className="bg-green-50 rounded-lg p-4 mb-6">
+                        <div className="flex">
+                          <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="ml-3">
+                            <p className="text-sm text-green-700">{usedResendInfo}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        className="w-full px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg 
+                          hover:from-green-600 hover:to-green-700 transition-colors focus:outline-none focus:ring-2 
+                          focus:ring-green-500 focus:ring-offset-2"
+                        onClick={handleUsedClose}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-xl px-6 py-4">
+                      <h3 className="text-xl font-bold text-white">Verification Confirmed</h3>
+                    </div>
+                    <div className="p-6">
+                      <div className="bg-blue-50 rounded-lg p-4 mb-6">
+                        <div className="flex">
+                          <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="ml-3">
+                            <p className="text-sm text-blue-700">{usedResendInfo}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg 
+                          hover:from-blue-600 hover:to-blue-700 transition-colors focus:outline-none focus:ring-2 
+                          focus:ring-blue-500 focus:ring-offset-2"
+                        onClick={handleUsedClose}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>

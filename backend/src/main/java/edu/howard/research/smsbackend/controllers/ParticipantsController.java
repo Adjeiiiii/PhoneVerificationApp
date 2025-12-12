@@ -213,14 +213,16 @@ public class ParticipantsController {
                     "message", "Survey link sent successfully!"
                 ));
             } else {
-                // Check if it's a "no links available" error
+                // Check if it's a "no links available" scenario
                 if ("no_links_available".equals(result.reason())) {
+                    // Verification succeeded, but no links available - return ok: true with no linkUrl
                     return ResponseEntity.ok(Map.of(
-                        "ok", false,
-                        "error", "no_links_available",
-                        "message", "No survey links are currently available. Please contact the administrator or try again later."
+                        "ok", true,
+                        "message", "Your phone number is verified. No survey link is available right now. Our study team has been notified and will assign one to you shortly."
                     ));
+                    // Note: linkUrl is intentionally omitted - frontend checks for its presence
                 } else {
+                    // Actual error
                     return ResponseEntity.ok(Map.of(
                         "ok", false,
                         "error", result.reason() != null ? result.reason() : "unknown_error",
