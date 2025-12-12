@@ -90,7 +90,7 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = IllegalStateException.class)
     public GiftCardDto sendGiftCard(UUID participantId, SendGiftCardRequest request, String adminUsername) {
         // Get participant
         Participant participant = participantRepository.findById(participantId)
@@ -172,6 +172,10 @@ public class GiftCardServiceImpl implements GiftCardService {
         log.info("Marking pool card {} as assigned to gift card {}", poolCard.getId(), giftCard.getId());
         int updated = giftCardPoolRepository.markAssigned(poolCard.getId(), giftCard.getId());
         log.info("Pool card marked as assigned - {} rows updated", updated);
+        if (updated == 0) {
+            // Another thread assigned this card after we selected it
+            throw new IllegalStateException("Gift card was just assigned to another participant. Please try again.");
+        }
 
         // Validate delivery method requirements
         if ("EMAIL".equals(request.getDeliveryMethod()) && (participant.getEmail() == null || participant.getEmail().trim().isEmpty())) {
@@ -215,6 +219,37 @@ public class GiftCardServiceImpl implements GiftCardService {
         if (smsSent || "SMS".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
             logDistributionAction(giftCard.getId(), DistributionAction.SMS_SENT, adminUsername, 
                     Map.of("sms_sent", smsSent, "delivery_method", request.getDeliveryMethod()));
+        }
+
+        // Determine if delivery succeeded based on requested method
+        boolean deliverySucceeded = switch (request.getDeliveryMethod()) {
+            case "EMAIL" -> emailSent;
+            case "SMS" -> smsSent;
+            case "BOTH" -> emailSent || smsSent;
+            default -> emailSent || smsSent;
+        };
+
+        // If no delivery succeeded, fail gracefully and release the pool card
+        if (!deliverySucceeded) {
+            log.warn("No delivery succeeded for gift card {} (participant {}, invitation {}) - marking as FAILED and releasing pool card",
+                    giftCard.getId(), participantId, invitation.getId());
+
+            // Mark gift card as failed
+            giftCard.setStatus(GiftCardStatus.FAILED);
+            giftCardRepository.save(giftCard);
+
+            // Release the pool card back to AVAILABLE
+            if (giftCard.getPoolId() != null) {
+                giftCardPoolRepository.findById(giftCard.getPoolId()).ifPresent(poolCard -> {
+                    poolCard.setStatus(PoolStatus.AVAILABLE);
+                    poolCard.setAssignedAt(null);
+                    poolCard.setAssignedToGiftCardId(null);
+                    giftCardPoolRepository.save(poolCard);
+                });
+            }
+
+            // Surface an error to the caller without rolling back the above changes
+            throw new IllegalStateException("Failed to send gift card - no delivery method succeeded");
         }
 
         return convertToDto(giftCard);
