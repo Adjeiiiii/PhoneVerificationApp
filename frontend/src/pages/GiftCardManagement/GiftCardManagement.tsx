@@ -1056,30 +1056,30 @@ const GiftCardManagement: React.FC = () => {
             {activeTab === 'pool' && (
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-xl font-semibold text-gray-900">Gift Card Pool</h2>
-                    <select
-                      value={poolStatusFilter}
-                      onChange={(e) => { setPoolStatusFilter(e.target.value); setPoolPage(0); }}
-                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="ALL">All Statuses</option>
-                      <option value="AVAILABLE">Available</option>
-                      <option value="ASSIGNED">Assigned</option>
-                      <option value="EXPIRED">Expired</option>
-                      <option value="INVALID">Invalid</option>
-                    </select>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={poolStatusFilter}
+                        onChange={(e) => { setPoolStatusFilter(e.target.value); setPoolPage(0); }}
+                        className="h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="ALL">All Statuses</option>
+                        <option value="AVAILABLE">Available</option>
+                        <option value="ASSIGNED">Assigned</option>
+                        <option value="EXPIRED">Expired</option>
+                        <option value="INVALID">Invalid</option>
+                      </select>
                       <input
                         type="text"
                         value={poolSearch}
                         onChange={(e) => { setPoolSearch(e.target.value); setPoolPage(0); }}
                         placeholder="Search code"
-                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="h-10 px-3 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-48 sm:w-64"
                       />
                       <button
                         onClick={() => { setPoolPage(0); fetchPoolData(); }}
-                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="h-10 px-4 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         Search
                       </button>
