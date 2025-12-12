@@ -20,8 +20,20 @@ public class GlobalExceptionHandler {
         log.warn("Illegal state exception: {}", ex.getMessage());
         
         Map<String, Object> response = new HashMap<>();
-        response.put("error", "Bad Request");
-        response.put("message", ex.getMessage());
+        response.put("ok", false);
+        response.put("error", ex.getMessage());
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
+        log.warn("Illegal argument exception: {}", ex.getMessage());
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("ok", false);
+        response.put("error", ex.getMessage());
         response.put("status", HttpStatus.BAD_REQUEST.value());
         
         return ResponseEntity.badRequest().body(response);

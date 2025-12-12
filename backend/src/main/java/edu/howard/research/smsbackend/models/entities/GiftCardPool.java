@@ -32,14 +32,14 @@ public class GiftCardPool {
     private String cardCode;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "card_type", nullable = false, length = 32)
-    private GiftCardType cardType;
+    @Column(name = "card_type", length = 32)
+    private GiftCardType cardType;  // Optional - defaults to null (assumed Amazon)
 
-    @Column(name = "card_value", nullable = false, precision = 10, scale = 2)
-    private BigDecimal cardValue;
+    @Column(name = "card_value", precision = 10, scale = 2)
+    private BigDecimal cardValue;  // Optional - amount may not be known
 
-    @Column(name = "redemption_url", nullable = false, length = 500)
-    private String redemptionUrl;
+    @Column(name = "redemption_url", length = 500)
+    private String redemptionUrl;  // Optional - defaults to Amazon redemption URL in code
 
     @Column(name = "redemption_instructions", length = 1000)
     private String redemptionInstructions;

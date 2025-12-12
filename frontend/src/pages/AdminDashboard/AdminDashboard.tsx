@@ -74,6 +74,7 @@ const AdminDashboard: React.FC = () => {
   const [showMarkCompletedConfirmModal, setShowMarkCompletedConfirmModal] = useState(false);
   const [markCompletedRecord, setMarkCompletedRecord] = useState<VerificationRecord | null>(null);
   const [isMarkingCompleted, setIsMarkingCompleted] = useState(true); // true = mark completed, false = mark uncompleted
+  const [hasGiftCardWarning, setHasGiftCardWarning] = useState(false);
 
   // For success/failure messages
   const [bulkActionMessage, setBulkActionMessage] = useState<string>('');
@@ -340,9 +341,28 @@ const AdminDashboard: React.FC = () => {
   };
 
   // Show confirmation modal for marking survey completed/uncompleted
-  const confirmMarkSurveyStatus = (rec: VerificationRecord) => {
+  const confirmMarkSurveyStatus = async (rec: VerificationRecord) => {
     setMarkCompletedRecord(rec);
-    setIsMarkingCompleted(!rec.completed_at);
+    const isCompleting = !rec.completed_at;
+    setIsMarkingCompleted(isCompleting);
+    
+    // If marking as uncompleted, check if there's a gift card
+    if (!isCompleting) {
+      try {
+        const response = await api.checkGiftCardForInvitation(rec.id);
+        if (response.hasGiftCard) {
+          // Show warning that gift card exists
+          setShowMarkCompletedConfirmModal(true);
+          setHasGiftCardWarning(true);
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking for gift card:', error);
+        // Continue anyway if check fails
+      }
+    }
+    
+    setHasGiftCardWarning(false);
     setShowMarkCompletedConfirmModal(true);
   };
 
@@ -1529,13 +1549,28 @@ const AdminDashboard: React.FC = () => {
                       </span>
                     )}
                   </p>
+                  {hasGiftCardWarning && !isMarkingCompleted && (
+                    <div className="mt-3 p-3 bg-gray-50 border-l-4 border-gray-400 rounded-lg border border-gray-200">
+                      <div className="flex items-start">
+                        <svg className="w-5 h-5 text-gray-600 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">Warning: Gift Card Already Sent</p>
+                          <p className="text-sm text-gray-700 mt-1">
+                            This participant has already received a gift card. Marking the survey as not completed will not revoke the gift card. If you need to revoke it, please do so from the Gift Card Management page.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
                     focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
-                  onClick={() => { setShowMarkCompletedConfirmModal(false); setMarkCompletedRecord(null); }}
+                  onClick={() => { setShowMarkCompletedConfirmModal(false); setMarkCompletedRecord(null); setHasGiftCardWarning(false); }}
                 >
                   Cancel
                 </button>

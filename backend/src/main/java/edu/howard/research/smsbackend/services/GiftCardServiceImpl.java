@@ -9,6 +9,7 @@ import edu.howard.research.smsbackend.repositories.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,6 +105,12 @@ public class GiftCardServiceImpl implements GiftCardService {
             throw new IllegalArgumentException("Invitation does not belong to this participant");
         }
         
+        // Automatically pick an available card from the pool
+        GiftCardPool poolCard = giftCardPoolRepository.findAvailable(
+                PageRequest.of(0, 1)
+        ).getContent().stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("No available gift cards in the pool. Please add gift cards to the pool first."));
+        
         // Find or create gift card
         GiftCard giftCard = giftCardRepository.findByParticipantIdAndInvitationId(participantId, invitation.getId())
                 .orElseGet(() -> {
@@ -115,31 +122,72 @@ public class GiftCardServiceImpl implements GiftCardService {
                     return newGiftCard;
                 });
 
-        // Update gift card details
-        giftCard.setCardCode(request.getCardCode());
-        giftCard.setCardType(request.getCardType());
-        giftCard.setCardValue(request.getCardValue());
-        giftCard.setRedemptionUrl(request.getRedemptionUrl());
-        giftCard.setRedemptionInstructions(request.getRedemptionInstructions());
-        giftCard.setExpiresAt(request.getExpiresAt());
-        giftCard.setNotes(request.getNotes());
-        giftCard.setSource(request.getSource());
-        giftCard.setPoolId(request.getPoolId());
+        // Validate pool card has required fields
+        if (poolCard.getCardCode() == null || poolCard.getCardCode().trim().isEmpty()) {
+            throw new IllegalStateException("Pool card has no code - cannot send gift card");
+        }
+
+        // Update gift card details from pool card
+        giftCard.setCardCode(poolCard.getCardCode().trim());
+        giftCard.setCardType(poolCard.getCardType() != null ? poolCard.getCardType() : GiftCardType.AMAZON);
+        giftCard.setCardValue(poolCard.getCardValue() != null ? poolCard.getCardValue() : BigDecimal.ZERO);
+        giftCard.setRedemptionUrl(poolCard.getRedemptionUrl() != null && !poolCard.getRedemptionUrl().trim().isEmpty() 
+                ? poolCard.getRedemptionUrl().trim() 
+                : DEFAULT_REDEMPTION_URL);
+        giftCard.setRedemptionInstructions(poolCard.getRedemptionInstructions());
+        giftCard.setExpiresAt(poolCard.getExpiresAt() != null ? poolCard.getExpiresAt() : request.getExpiresAt());
+        giftCard.setNotes(request.getNotes() != null ? request.getNotes().trim() : null);
+        giftCard.setSource("POOL");
+        giftCard.setPoolId(poolCard.getId());
         giftCard.setSentBy(adminUsername);
         giftCard.setSentAt(OffsetDateTime.now());
         giftCard.setStatus(GiftCardStatus.SENT);
 
-        // Save gift card first to get its ID
-        giftCard = giftCardRepository.save(giftCard);
+        // Validate all required fields are set before saving
+        if (giftCard.getCardCode() == null || giftCard.getCardCode().trim().isEmpty()) {
+            throw new IllegalStateException("Card code is required");
+        }
+        if (giftCard.getCardType() == null) {
+            throw new IllegalStateException("Card type is required");
+        }
+        if (giftCard.getCardValue() == null) {
+            throw new IllegalStateException("Card value is required");
+        }
+        if (giftCard.getRedemptionUrl() == null || giftCard.getRedemptionUrl().trim().isEmpty()) {
+            throw new IllegalStateException("Redemption URL is required");
+        }
+        if (giftCard.getSource() == null || giftCard.getSource().trim().isEmpty()) {
+            throw new IllegalStateException("Source is required");
+        }
 
-        // If from pool, mark pool card as assigned
-        log.info("Checking pool assignment - source: {}, poolId: {}", request.getSource(), request.getPoolId());
-        if ("POOL".equals(request.getSource()) && request.getPoolId() != null) {
-            log.info("Marking pool card {} as assigned to gift card {}", request.getPoolId(), giftCard.getId());
-            int updated = giftCardPoolRepository.markAssigned(request.getPoolId(), giftCard.getId());
-            log.info("Pool card marked as assigned - {} rows updated", updated);
-        } else {
-            log.info("Not from pool - source: {}, poolId: {}", request.getSource(), request.getPoolId());
+        // Save gift card first to get its ID
+        try {
+            giftCard = giftCardRepository.save(giftCard);
+        } catch (Exception e) {
+            log.error("Failed to save gift card: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to save gift card: " + e.getMessage(), e);
+        }
+
+        // Mark pool card as assigned
+        log.info("Marking pool card {} as assigned to gift card {}", poolCard.getId(), giftCard.getId());
+        int updated = giftCardPoolRepository.markAssigned(poolCard.getId(), giftCard.getId());
+        log.info("Pool card marked as assigned - {} rows updated", updated);
+
+        // Validate delivery method requirements
+        if ("EMAIL".equals(request.getDeliveryMethod()) && (participant.getEmail() == null || participant.getEmail().trim().isEmpty())) {
+            throw new IllegalArgumentException("Cannot send via email - participant does not have an email address");
+        }
+        
+        if ("SMS".equals(request.getDeliveryMethod()) && (participant.getPhone() == null || participant.getPhone().trim().isEmpty())) {
+            throw new IllegalArgumentException("Cannot send via SMS - participant does not have a phone number");
+        }
+        
+        if ("BOTH".equals(request.getDeliveryMethod())) {
+            boolean hasEmail = participant.getEmail() != null && !participant.getEmail().trim().isEmpty();
+            boolean hasPhone = participant.getPhone() != null && !participant.getPhone().trim().isEmpty();
+            if (!hasEmail && !hasPhone) {
+                throw new IllegalArgumentException("Cannot send via BOTH - participant has neither email nor phone number");
+            }
         }
 
         // Send via email/SMS
@@ -147,18 +195,24 @@ public class GiftCardServiceImpl implements GiftCardService {
         boolean smsSent = false;
 
         if ("EMAIL".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
-            emailSent = sendGiftCardEmail(giftCard);
+            if (participant.getEmail() != null && !participant.getEmail().trim().isEmpty()) {
+                emailSent = sendGiftCardEmail(giftCard);
+            }
         }
 
         if ("SMS".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
-            smsSent = sendGiftCardSms(giftCard);
+            if (participant.getPhone() != null && !participant.getPhone().trim().isEmpty()) {
+                smsSent = sendGiftCardSms(giftCard);
+            }
         }
 
         // Log the sending
-        logDistributionAction(giftCard.getId(), DistributionAction.EMAIL_SENT, adminUsername, 
-                Map.of("email_sent", emailSent, "delivery_method", request.getDeliveryMethod()));
+        if (emailSent || "EMAIL".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
+            logDistributionAction(giftCard.getId(), DistributionAction.EMAIL_SENT, adminUsername, 
+                    Map.of("email_sent", emailSent, "delivery_method", request.getDeliveryMethod()));
+        }
         
-        if (smsSent) {
+        if (smsSent || "SMS".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
             logDistributionAction(giftCard.getId(), DistributionAction.SMS_SENT, adminUsername, 
                     Map.of("sms_sent", smsSent, "delivery_method", request.getDeliveryMethod()));
         }
@@ -273,6 +327,13 @@ public class GiftCardServiceImpl implements GiftCardService {
         )).collect(Collectors.toList());
     }
 
+    // Default Amazon redemption URL
+    private static final String DEFAULT_REDEMPTION_URL = "https://www.amazon.com/gc/redeem";
+    
+    // Pattern for validating Amazon gift card codes (XXXX-XXXXXX-XXXX format)
+    private static final java.util.regex.Pattern GIFT_CARD_CODE_PATTERN = 
+            java.util.regex.Pattern.compile("^[A-Z0-9]{4}-[A-Z0-9]{6}-[A-Z0-9]{4}$", java.util.regex.Pattern.CASE_INSENSITIVE);
+
     @Override
     @Transactional
     public UploadResultDto uploadGiftCards(MultipartFile file, String batchLabel, String adminUsername) {
@@ -280,107 +341,63 @@ public class GiftCardServiceImpl implements GiftCardService {
         int successfulUploads = 0;
         int totalRows = 0;
 
-        try (CSVReader reader = new CSVReader(new InputStreamReader(file.getInputStream()))) {
-            List<String[]> rows = reader.readAll();
-            // totalRows should only count data rows, not the header
-            totalRows = rows.size() > 0 ? rows.size() - 1 : 0;
-
-            for (int i = 1; i < rows.size(); i++) { // Skip header
-                String[] row = rows.get(i);
+        try {
+            // Read file as lines - supports both plain text (one code per line) and single-column CSV
+            List<String> lines = new java.io.BufferedReader(new InputStreamReader(file.getInputStream()))
+                    .lines()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty())
+                    .collect(Collectors.toList());
+            
+            totalRows = lines.size();
+            
+            for (int i = 0; i < lines.size(); i++) {
+                String line = lines.get(i);
+                int lineNumber = i + 1;
+                
                 try {
-                    if (row.length < 4) {
-                        errors.add("Row " + (i + 1) + ": Insufficient columns (need at least: card_code, card_type, card_value, redemption_url)");
+                    // Extract the code - handle CSV format (might have quotes or extra columns)
+                    String cardCode = line.split(",")[0].trim().replace("\"", "").toUpperCase();
+                    
+                    // Skip header row if present
+                    if (i == 0 && (cardCode.equalsIgnoreCase("code") || 
+                                   cardCode.equalsIgnoreCase("card_code") || 
+                                   cardCode.equalsIgnoreCase("gift_card_code"))) {
+                        totalRows--; // Don't count header in total
                         continue;
                     }
-
-                    String cardCode = row[0].trim();
-                    GiftCardType cardType = GiftCardType.valueOf(row[1].trim().toUpperCase());
-                    BigDecimal cardValue = new BigDecimal(row[2].trim());
-                    String redemptionUrl = row[3].trim();
                     
-                    // Parse date from separate columns (expires_day, expires_month, expires_year) or single expires_at column
-                    OffsetDateTime expiresAt = null;
-                    
-                    // Check if we have the new format (7+ columns with separate day/month/year)
-                    if (row.length >= 7) {
-                        // New format: separate day, month, year columns
-                        String expiresDayStr = row[4].trim();
-                        String expiresMonthStr = row[5].trim();
-                        String expiresYearStr = row[6].trim();
-                        
-                        // Only parse if all three date fields are provided and non-empty
-                        if (!expiresDayStr.isEmpty() && !expiresMonthStr.isEmpty() && !expiresYearStr.isEmpty()) {
-                            try {
-                                int day = Integer.parseInt(expiresDayStr);
-                                int month = Integer.parseInt(expiresMonthStr);
-                                int year = Integer.parseInt(expiresYearStr);
-                                
-                                // Validate date values
-                                if (month < 1 || month > 12) {
-                                    errors.add("Row " + (i + 1) + ": Invalid month (must be 1-12): " + month);
-                                    continue;
-                                }
-                                if (day < 1 || day > 31) {
-                                    errors.add("Row " + (i + 1) + ": Invalid day (must be 1-31): " + day);
-                                    continue;
-                                }
-                                if (year < 2000 || year > 2100) {
-                                    errors.add("Row " + (i + 1) + ": Invalid year (must be 2000-2100): " + year);
-                                    continue;
-                                }
-                                
-                                // Create OffsetDateTime at end of day in UTC
-                                try {
-                                    expiresAt = OffsetDateTime.of(year, month, day, 23, 59, 59, 0, java.time.ZoneOffset.UTC);
-                                } catch (java.time.DateTimeException e) {
-                                    errors.add("Row " + (i + 1) + ": Invalid date (e.g., February 30th doesn't exist): " + month + "/" + day + "/" + year);
-                                    continue;
-                                }
-                            } catch (NumberFormatException e) {
-                                errors.add("Row " + (i + 1) + ": Invalid date format. Day, month, and year must be numbers. Got: day='" + expiresDayStr + "', month='" + expiresMonthStr + "', year='" + expiresYearStr + "'");
-                                continue;
-                            }
-                        }
-                        // If date columns are empty, expiresAt remains null (no expiration)
-                    } else if (row.length == 5) {
-                        // Legacy format: single expires_at column (ISO-8601 format)
-                        String expiresAtStr = row[4].trim();
-                        if (!expiresAtStr.isEmpty()) {
-                            try {
-                                expiresAt = OffsetDateTime.parse(expiresAtStr);
-                            } catch (Exception e) {
-                                errors.add("Row " + (i + 1) + ": Invalid date format. Use separate day/month/year columns (7 columns) or ISO-8601 format (5 columns). Error: " + e.getMessage());
-                                continue;
-                            }
-                        }
+                    // Validate code format
+                    if (!GIFT_CARD_CODE_PATTERN.matcher(cardCode).matches()) {
+                        errors.add("Line " + lineNumber + ": Invalid code format '" + cardCode + "'. Expected format: XXXX-XXXXXX-XXXX");
+                        continue;
                     }
-                    // If row.length is 4, no expiration date (expiresAt remains null)
-
+                    
                     // Check for duplicates
                     if (giftCardPoolRepository.existsByCardCode(cardCode)) {
-                        errors.add("Row " + (i + 1) + ": Duplicate card code: " + cardCode);
+                        errors.add("Line " + lineNumber + ": Duplicate code: " + cardCode);
                         continue;
                     }
 
                     GiftCardPool poolCard = new GiftCardPool();
                     poolCard.setCardCode(cardCode);
-                    poolCard.setCardType(cardType);
-                    poolCard.setCardValue(cardValue);
-                    poolCard.setRedemptionUrl(redemptionUrl);
-                    poolCard.setBatchLabel(batchLabel);
+                    poolCard.setCardType(null);  // Optional - not needed for simple import
+                    poolCard.setCardValue(null); // Optional - amount unknown
+                    poolCard.setRedemptionUrl(DEFAULT_REDEMPTION_URL);
+                    poolCard.setBatchLabel(batchLabel); // Can be null
                     poolCard.setUploadedBy(adminUsername);
                     poolCard.setStatus(PoolStatus.AVAILABLE);
-                    poolCard.setExpiresAt(expiresAt);
+                    poolCard.setExpiresAt(null); // No expiration
 
                     giftCardPoolRepository.save(poolCard);
                     successfulUploads++;
 
                 } catch (Exception e) {
-                    errors.add("Row " + (i + 1) + ": " + e.getMessage());
+                    errors.add("Line " + lineNumber + ": " + e.getMessage());
                 }
             }
 
-        } catch (IOException | CsvException e) {
+        } catch (IOException e) {
             errors.add("File processing error: " + e.getMessage());
         }
 
@@ -437,6 +454,17 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
+    public Page<GiftCardPoolDto> getGiftCardsFromPool(PoolStatus status, Pageable pageable) {
+        Page<GiftCardPool> poolCards;
+        if (status == null) {
+            poolCards = giftCardPoolRepository.findAllOrdered(pageable);
+        } else {
+            poolCards = giftCardPoolRepository.findByStatus(status, pageable);
+        }
+        return poolCards.map(this::convertPoolToDto);
+    }
+
+    @Override
     public Page<GiftCardPoolDto> getGiftCardsByBatch(String batchLabel, Pageable pageable) {
         Page<GiftCardPool> poolCards = giftCardPoolRepository.findAvailableByBatch(batchLabel, pageable);
         return poolCards.map(this::convertPoolToDto);
@@ -446,6 +474,29 @@ public class GiftCardServiceImpl implements GiftCardService {
     public byte[] exportUsedGiftCards() {
         // TODO: Implement CSV export
         return new byte[0];
+    }
+
+    @Override
+    @Transactional
+    public GiftCardPoolDto updateGiftCardInPool(UUID poolId, UpdateGiftCardRequest request, String adminUsername) {
+        GiftCardPool poolCard = giftCardPoolRepository.findById(poolId)
+                .orElseThrow(() -> new NotFoundException("Gift card not found in pool: " + poolId));
+        
+        // Check if code is being changed and if new code already exists
+        if (request.getCardCode() != null && !request.getCardCode().trim().isEmpty()) {
+            String newCode = request.getCardCode().trim().toUpperCase();
+            
+            // If code is different, check for duplicates
+            if (!newCode.equals(poolCard.getCardCode())) {
+                if (giftCardPoolRepository.existsByCardCode(newCode)) {
+                    throw new IllegalArgumentException("Gift card code already exists: " + newCode);
+                }
+                poolCard.setCardCode(newCode);
+            }
+        }
+        
+        giftCardPoolRepository.save(poolCard);
+        return convertPoolToDto(poolCard);
     }
 
     @Override
@@ -532,6 +583,14 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
+    public boolean hasGiftCardForInvitation(UUID invitationId) {
+        List<GiftCard> giftCards = giftCardRepository.findByInvitationId(invitationId);
+        // Check if there's any gift card that's not UNSENT
+        return giftCards.stream()
+                .anyMatch(gc -> gc.getStatus() != GiftCardStatus.UNSENT);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Page<UnsentGiftCardDto> getUnsentGiftCards(Pageable pageable) {
         // Find gift cards that have ever been unsent (have UNSENT distribution log)
@@ -586,21 +645,34 @@ public class GiftCardServiceImpl implements GiftCardService {
             String subject = "Your Gift Card - Howard Research Study";
             String htmlContent = buildGiftCardEmailHtml(giftCard);
             
-            return emailService.sendGiftCard(giftCard.getParticipant().getEmail(), 
-                    giftCard.getParticipant().getName(), subject, htmlContent);
+            String email = giftCard.getParticipant().getEmail();
+            String name = giftCard.getParticipant().getName();
+            
+            if (email == null || email.trim().isEmpty()) {
+                log.warn("Cannot send email - participant has no email address");
+                return false;
+            }
+            
+            return emailService.sendGiftCard(email, name, subject, htmlContent);
         } catch (Exception e) {
-            log.error("Failed to send gift card email: {}", e.getMessage());
+            log.error("Failed to send gift card email: {}", e.getMessage(), e);
             return false;
         }
     }
 
     private boolean sendGiftCardSms(GiftCard giftCard) {
         try {
+            String phone = giftCard.getParticipant().getPhone();
+            if (phone == null || phone.trim().isEmpty()) {
+                log.warn("Cannot send SMS - participant has no phone number");
+                return false;
+            }
+            
             String message = buildGiftCardSmsMessage(giftCard);
-            Map<String, Object> result = smsService.send(giftCard.getParticipant().getPhone(), message);
+            Map<String, Object> result = smsService.send(phone, message);
             return Boolean.TRUE.equals(result.get("ok"));
         } catch (Exception e) {
-            log.error("Failed to send gift card SMS: {}", e.getMessage());
+            log.error("Failed to send gift card SMS: {}", e.getMessage(), e);
             return false;
         }
     }
@@ -647,20 +719,26 @@ public class GiftCardServiceImpl implements GiftCardService {
             </html>
             """, 
             giftCard.getParticipant().getName() != null ? giftCard.getParticipant().getName() : "Participant",
-            giftCard.getCardValue(),
-            giftCard.getCardType(),
-            giftCard.getCardType(),
-            giftCard.getCardCode(),
-            giftCard.getCardValue(),
+            giftCard.getCardValue() != null ? giftCard.getCardValue().toString() : "N/A",
+            giftCard.getCardType() != null ? giftCard.getCardType().toString() : "AMAZON",
+            giftCard.getCardType() != null ? giftCard.getCardType().toString() : "AMAZON",
+            giftCard.getCardCode() != null ? giftCard.getCardCode() : "",
+            giftCard.getCardValue() != null ? giftCard.getCardValue().toString() : "N/A",
             giftCard.getExpiresAt() != null ? giftCard.getExpiresAt().toString() : "No expiration",
-            giftCard.getRedemptionUrl(),
-            giftCard.getRedemptionUrl(),
-            giftCard.getRedemptionUrl(),
-            giftCard.getCardCode()
+            giftCard.getRedemptionUrl() != null ? giftCard.getRedemptionUrl() : DEFAULT_REDEMPTION_URL,
+            giftCard.getRedemptionUrl() != null ? giftCard.getRedemptionUrl() : DEFAULT_REDEMPTION_URL,
+            giftCard.getRedemptionUrl() != null ? giftCard.getRedemptionUrl() : DEFAULT_REDEMPTION_URL,
+            giftCard.getCardCode() != null ? giftCard.getCardCode() : ""
         );
     }
 
     private String buildGiftCardSmsMessage(GiftCard giftCard) {
+        String cardValue = giftCard.getCardValue() != null ? giftCard.getCardValue().toString() : "N/A";
+        String cardType = giftCard.getCardType() != null ? giftCard.getCardType().toString() : "AMAZON";
+        String cardCode = giftCard.getCardCode() != null ? giftCard.getCardCode() : "";
+        String redemptionUrl = giftCard.getRedemptionUrl() != null ? giftCard.getRedemptionUrl() : DEFAULT_REDEMPTION_URL;
+        String expiresAt = giftCard.getExpiresAt() != null ? giftCard.getExpiresAt().toString() : "No expiration";
+        
         return String.format("""
             🎁 Your $%s %s gift card is ready!
             
@@ -671,11 +749,11 @@ public class GiftCardServiceImpl implements GiftCardService {
             
             Questions? Call (240) 428-8442
             """,
-            giftCard.getCardValue(),
-            giftCard.getCardType(),
-            giftCard.getCardCode(),
-            giftCard.getRedemptionUrl(),
-            giftCard.getExpiresAt() != null ? giftCard.getExpiresAt().toString() : "No expiration"
+            cardValue,
+            cardType,
+            cardCode,
+            redemptionUrl,
+            expiresAt
         );
     }
 
