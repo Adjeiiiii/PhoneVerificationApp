@@ -319,9 +319,10 @@ export const api = {
     return api.get(`/api/admin/gift-cards/pool/available?page=${page}&size=${size}`);
   },
 
-  getGiftCardsFromPool: async (status: string | null, page = 0, size = 100) => {
+  getGiftCardsFromPool: async (status: string | null, page = 0, size = 20, code?: string) => {
     const statusParam = status ? `&status=${status}` : '';
-    return api.get(`/api/admin/gift-cards/pool?page=${page}&size=${size}${statusParam}`);
+    const codeParam = code ? `&code=${encodeURIComponent(code)}` : '';
+    return api.get(`/api/admin/gift-cards/pool?page=${page}&size=${size}${statusParam}${codeParam}`);
   },
 
   getEligibleParticipants: async () => {
