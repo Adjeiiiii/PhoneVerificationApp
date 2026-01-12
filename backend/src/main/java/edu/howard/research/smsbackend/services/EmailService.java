@@ -7,6 +7,7 @@ import com.sendgrid.SendGrid;
 import com.sendgrid.helpers.mail.Mail;
 import com.sendgrid.helpers.mail.objects.Content;
 import com.sendgrid.helpers.mail.objects.Email;
+import edu.howard.research.smsbackend.models.dto.EmailSendResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -87,6 +88,11 @@ public class EmailService {
     }
 
     public boolean sendGiftCard(String toEmail, String participantName, String subject, String htmlContent) {
+        EmailSendResult result = sendGiftCardWithDetails(toEmail, participantName, subject, htmlContent);
+        return result.isSuccess();
+    }
+    
+    public EmailSendResult sendGiftCardWithDetails(String toEmail, String participantName, String subject, String htmlContent) {
         try {
             Email from = new Email(fromEmail, fromName);
             Content content = new Content("text/html", htmlContent);
@@ -102,14 +108,24 @@ public class EmailService {
             
             Response response = sg.api(request);
             
-            log.info("Gift card email sent to {}: Status={}, ResponseCode={}", 
-                    toEmail, response.getStatusCode(), response.getBody());
+            int statusCode = response.getStatusCode();
+            String responseBody = response.getBody();
             
-            return response.getStatusCode() >= 200 && response.getStatusCode() < 300;
+            log.info("Gift card email sent to {}: Status={}, ResponseCode={}", 
+                    toEmail, statusCode, responseBody);
+            
+            if (statusCode >= 200 && statusCode < 300) {
+                return EmailSendResult.success();
+            } else {
+                String errorMsg = String.format("SendGrid returned status %d: %s", statusCode, responseBody);
+                log.warn("Gift card email failed for {}: {}", toEmail, errorMsg);
+                return EmailSendResult.failure(errorMsg, statusCode, responseBody);
+            }
             
         } catch (Exception e) {
-            log.error("Failed to send gift card email to {}: {}", toEmail, e.getMessage());
-            return false;
+            String errorMsg = e.getMessage() != null ? e.getMessage() : "Unknown error";
+            log.error("Failed to send gift card email to {}: {}", toEmail, errorMsg, e);
+            return EmailSendResult.failure(errorMsg);
         }
     }
 

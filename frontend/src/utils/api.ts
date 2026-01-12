@@ -372,6 +372,14 @@ export const api = {
     return api.post(`/api/admin/gift-cards/send/${participantId}`, giftCardData);
   },
 
+  batchSendGiftCards: async (participants: Array<{ participantId: string; invitationId: string }>, deliveryMethod: string, notes?: string) => {
+    return api.post('/api/admin/gift-cards/batch-send', {
+      participants,
+      deliveryMethod,
+      notes: notes || ''
+    });
+  },
+
   resendGiftCard: async (giftCardId: string) => {
     return api.post(`/api/admin/gift-cards/${giftCardId}/resend`, {});
   },

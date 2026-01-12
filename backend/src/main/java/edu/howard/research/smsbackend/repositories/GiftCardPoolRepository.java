@@ -26,9 +26,9 @@ public interface GiftCardPoolRepository extends JpaRepository<GiftCardPool, UUID
                                                    Pageable pageable);
 
     /**
-     * Find any available gift card
+     * Find any available gift card (excluding expired cards)
      */
-    @Query("SELECT gcp FROM GiftCardPool gcp WHERE gcp.status = 'AVAILABLE' ORDER BY gcp.uploadedAt ASC")
+    @Query("SELECT gcp FROM GiftCardPool gcp WHERE gcp.status = 'AVAILABLE' AND (gcp.expiresAt IS NULL OR gcp.expiresAt > CURRENT_TIMESTAMP) ORDER BY gcp.uploadedAt ASC")
     Page<GiftCardPool> findAvailable(Pageable pageable);
 
     /**
@@ -71,9 +71,9 @@ public interface GiftCardPoolRepository extends JpaRepository<GiftCardPool, UUID
                                      @Param("cardValue") java.math.BigDecimal cardValue);
 
     /**
-     * Count total available gift cards
+     * Count total available gift cards (excluding expired cards)
      */
-    @Query("SELECT COUNT(gcp) FROM GiftCardPool gcp WHERE gcp.status = 'AVAILABLE'")
+    @Query("SELECT COUNT(gcp) FROM GiftCardPool gcp WHERE gcp.status = 'AVAILABLE' AND (gcp.expiresAt IS NULL OR gcp.expiresAt > CURRENT_TIMESTAMP)")
     long countAvailable();
 
     /**

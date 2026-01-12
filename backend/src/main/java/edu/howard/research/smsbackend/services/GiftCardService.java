@@ -27,6 +27,11 @@ public interface GiftCardService {
     GiftCardDto sendGiftCard(UUID participantId, SendGiftCardRequest request, String adminUsername);
 
     /**
+     * Batch send gift cards to multiple participants
+     */
+    BatchSendGiftCardResult batchSendGiftCards(BatchSendGiftCardRequest request, String adminUsername);
+
+    /**
      * Get all gift cards
      */
     Page<GiftCardDto> getAllGiftCards(Pageable pageable);
@@ -127,4 +132,9 @@ public interface GiftCardService {
      * Check if an invitation has a gift card
      */
     boolean hasGiftCardForInvitation(UUID invitationId);
+
+    /**
+     * Cleanup orphaned ASSIGNED pool cards (cards marked as ASSIGNED but not linked to any gift card)
+     */
+    int cleanupOrphanedAssignedPoolCards();
 }

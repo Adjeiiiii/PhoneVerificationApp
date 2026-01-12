@@ -4,6 +4,7 @@ import edu.howard.research.smsbackend.models.dto.*;
 import edu.howard.research.smsbackend.models.entities.PoolStatus;
 import edu.howard.research.smsbackend.models.entities.GiftCardStatus;
 import edu.howard.research.smsbackend.security.JwtAuthenticationFilter;
+import edu.howard.research.smsbackend.services.EmailService;
 import edu.howard.research.smsbackend.services.GiftCardService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -29,6 +31,7 @@ import java.util.UUID;
 public class AdminGiftCardController {
 
     private final GiftCardService giftCardService;
+    private final EmailService emailService;
 
     /**
      * Get participants eligible for gift cards (completed surveys, no gift card yet)
@@ -89,6 +92,21 @@ public class AdminGiftCardController {
 
         GiftCardDto giftCard = giftCardService.sendGiftCard(participantId, request, adminUsername);
         return ResponseEntity.status(HttpStatus.CREATED).body(giftCard);
+    }
+
+    /**
+     * Batch send gift cards to multiple participants
+     */
+    @PostMapping("/batch-send")
+    public ResponseEntity<BatchSendGiftCardResult> batchSendGiftCards(
+            @Valid @RequestBody BatchSendGiftCardRequest request
+    ) {
+        String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
+        log.info("Batch send gift cards request for {} participants, admin: {}", 
+                request.getParticipants().size(), adminUsername);
+
+        BatchSendGiftCardResult result = giftCardService.batchSendGiftCards(request, adminUsername);
+        return ResponseEntity.ok(result);
     }
 
     /**
@@ -185,16 +203,19 @@ public class AdminGiftCardController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
+        log.info("GET /pool - status={}, code={}, page={}, size={}", status, code, page, size);
         Pageable pageable = PageRequest.of(page, size);
         PoolStatus poolStatus = null;
         if (status != null && !status.isEmpty()) {
             try {
                 poolStatus = PoolStatus.valueOf(status.toUpperCase());
             } catch (IllegalArgumentException e) {
+                log.warn("Invalid status parameter: {}", status);
                 return ResponseEntity.badRequest().build();
             }
         }
         Page<GiftCardPoolDto> giftCards = giftCardService.getGiftCardsFromPool(poolStatus, code, pageable);
+        log.info("GET /pool - returning {} cards (total: {})", giftCards.getNumberOfElements(), giftCards.getTotalElements());
         return ResponseEntity.ok(giftCards);
     }
 
@@ -290,5 +311,128 @@ public class AdminGiftCardController {
         log.info("Gift card unsent successfully");
         
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Cleanup orphaned ASSIGNED pool cards (manual trigger)
+     */
+    @PostMapping("/pool/cleanup-orphaned")
+    public ResponseEntity<Map<String, Object>> cleanupOrphanedPoolCards() {
+        log.info("Manual cleanup of orphaned pool cards requested");
+        
+        int cleanedCount = giftCardService.cleanupOrphanedAssignedPoolCards();
+        
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", "Cleanup completed",
+            "orphanedCardsFound", cleanedCount,
+            "cardsReset", cleanedCount
+        ));
+    }
+
+    /**
+     * Test sending a gift card email to a participant
+     */
+    @PostMapping("/test-email")
+    public ResponseEntity<Map<String, Object>> testGiftCardEmail(
+            @RequestParam("toEmail") String toEmail,
+            @RequestParam(value = "participantName", required = false) String participantName,
+            @RequestParam(value = "cardCode", required = false) String cardCode
+    ) {
+        log.info("Test gift card email requested to: {}", toEmail);
+        
+        try {
+            String testName = participantName != null && !participantName.trim().isEmpty() 
+                    ? participantName 
+                    : "Test Participant";
+            String testCode = cardCode != null && !cardCode.trim().isEmpty() 
+                    ? cardCode 
+                    : "TEST-123456-CODE";
+            
+            // Build a test gift card email HTML
+            String htmlContent = String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Your Gift Card - Howard Research Study</title>
+                </head>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h1 style="color: #2c3e50; margin: 0;">Your Gift Card</h1>
+                    </div>
+                    
+                    <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px;">
+                        <h2 style="color: #2c3e50;">Hello %s!</h2>
+                        
+                        <p>Thank you for completing the survey! Here's your Amazon gift card:</p>
+                        
+                        <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; border: 2px solid #ffc107;">
+                            <p style="margin: 0; font-size: 18px; font-weight: bold; color: #856404;">
+                                Gift Card Code: <span style="font-family: monospace; font-size: 20px;">%s</span>
+                            </p>
+                        </div>
+                        
+                        <div style="background-color: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
+                            <a href="https://www.amazon.com/gc/redeem" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                                Redeem Your Gift Card
+                            </a>
+                        </div>
+                        
+                        <p><strong>How to redeem:</strong></p>
+                        <ol>
+                            <li>Click the "Redeem Your Gift Card" button above or visit <a href="https://www.amazon.com/gc/redeem">https://www.amazon.com/gc/redeem</a></li>
+                            <li>Enter your gift card code: <strong>%s</strong></li>
+                            <li>Follow the instructions to add it to your Amazon account</li>
+                        </ol>
+                        
+                        <p>If you have any questions, please contact us at <a href="tel:2404288442">(240) 428-8442</a> or reply to this email.</p>
+                        
+                        <p>Thank you for your participation!</p>
+                        
+                        <p style="margin-top: 30px;">
+                            <strong>The HCAI Research Team</strong><br>
+                            Howard University<br>
+                            HCAI (Howard University Research)
+                        </p>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 20px; color: #6c757d; font-size: 12px;">
+                        <p>This is a test email. Gift card code shown is for testing purposes only.</p>
+                    </div>
+                </body>
+                </html>
+                """, testName, testCode, testCode);
+            
+            String subject = "Your Gift Card - Howard Research Study (TEST)";
+            edu.howard.research.smsbackend.models.dto.EmailSendResult result = 
+                    emailService.sendGiftCardWithDetails(toEmail, testName, subject, htmlContent);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", result.isSuccess());
+            response.put("toEmail", toEmail);
+            response.put("participantName", testName);
+            response.put("cardCode", testCode);
+            
+            if (result.isSuccess()) {
+                response.put("message", "Test gift card email sent successfully");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("error", result.getErrorMessage());
+                if (result.getStatusCode() != null) {
+                    response.put("statusCode", result.getStatusCode());
+                }
+                if (result.getResponseBody() != null) {
+                    response.put("responseBody", result.getResponseBody());
+                }
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+        } catch (Exception e) {
+            log.error("Test gift card email failed: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Test email failed: " + e.getMessage()));
+        }
     }
 }

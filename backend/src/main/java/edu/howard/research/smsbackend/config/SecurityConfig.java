@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/upload-links").permitAll()  // Allow CSV upload without auth for now
                 .requestMatchers("/api/admin/links/cleanup-orphaned").permitAll()  // Allow cleanup without auth for now
                 .requestMatchers("/api/admin/test-email").permitAll()  // Allow test email without auth for now
+                .requestMatchers("/api/admin/gift-cards/test-email").permitAll()  // Allow gift card test email without auth for testing
                 .requestMatchers("/actuator/**").permitAll()
                 // Admin endpoints require authentication
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")

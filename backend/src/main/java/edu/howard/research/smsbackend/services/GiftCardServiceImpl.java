@@ -105,6 +105,17 @@ public class GiftCardServiceImpl implements GiftCardService {
             throw new IllegalArgumentException("Invitation does not belong to this participant");
         }
         
+        // Check if a gift card already exists with SENT or REDEEMED status for this invitation
+        Optional<GiftCard> existingGiftCard = giftCardRepository.findByParticipantIdAndInvitationId(participantId, invitation.getId());
+        if (existingGiftCard.isPresent()) {
+            GiftCard existing = existingGiftCard.get();
+            if (existing.getStatus() == GiftCardStatus.SENT || existing.getStatus() == GiftCardStatus.REDEEMED) {
+                throw new IllegalStateException(
+                    String.format("A gift card has already been sent for this invitation. Status: %s. Gift Card ID: %s", 
+                        existing.getStatus(), existing.getId()));
+            }
+        }
+        
         // Automatically pick an available card from the pool
         GiftCardPool poolCard = giftCardPoolRepository.findAvailable(
                 PageRequest.of(0, 1)
@@ -112,8 +123,7 @@ public class GiftCardServiceImpl implements GiftCardService {
                 .orElseThrow(() -> new IllegalStateException("No available gift cards in the pool. Please add gift cards to the pool first."));
         
         // Find or create gift card
-        GiftCard giftCard = giftCardRepository.findByParticipantIdAndInvitationId(participantId, invitation.getId())
-                .orElseGet(() -> {
+        GiftCard giftCard = existingGiftCard.orElseGet(() -> {
                     GiftCard newGiftCard = new GiftCard();
                     newGiftCard.setParticipant(participant);
                     newGiftCard.setInvitation(invitation);
@@ -197,10 +207,12 @@ public class GiftCardServiceImpl implements GiftCardService {
         // Send via email/SMS
         boolean emailSent = false;
         boolean smsSent = false;
+        EmailSendResult emailResult = null;
 
         if ("EMAIL".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
             if (participant.getEmail() != null && !participant.getEmail().trim().isEmpty()) {
-                emailSent = sendGiftCardEmail(giftCard);
+                emailResult = sendGiftCardEmailWithDetails(giftCard);
+                emailSent = emailResult.isSuccess();
             }
         }
 
@@ -210,10 +222,22 @@ public class GiftCardServiceImpl implements GiftCardService {
             }
         }
 
-        // Log the sending
-        if (emailSent || "EMAIL".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
-            logDistributionAction(giftCard.getId(), DistributionAction.EMAIL_SENT, adminUsername, 
-                    Map.of("email_sent", emailSent, "delivery_method", request.getDeliveryMethod()));
+        // Log the sending with detailed error information
+        if ("EMAIL".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
+            Map<String, Object> emailDetails = new HashMap<>();
+            emailDetails.put("email_sent", emailSent);
+            emailDetails.put("delivery_method", request.getDeliveryMethod());
+            emailDetails.put("recipient_email", participant.getEmail());
+            if (emailResult != null && !emailResult.isSuccess()) {
+                emailDetails.put("error_message", emailResult.getErrorMessage());
+                if (emailResult.getStatusCode() != null) {
+                    emailDetails.put("status_code", emailResult.getStatusCode());
+                }
+                if (emailResult.getResponseBody() != null) {
+                    emailDetails.put("response_body", emailResult.getResponseBody());
+                }
+            }
+            logDistributionAction(giftCard.getId(), DistributionAction.EMAIL_SENT, adminUsername, emailDetails);
         }
         
         if (smsSent || "SMS".equals(request.getDeliveryMethod()) || "BOTH".equals(request.getDeliveryMethod())) {
@@ -253,6 +277,69 @@ public class GiftCardServiceImpl implements GiftCardService {
         }
 
         return convertToDto(giftCard);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = IllegalStateException.class)
+    public BatchSendGiftCardResult batchSendGiftCards(BatchSendGiftCardRequest request, String adminUsername) {
+        log.info("Batch sending gift cards to {} participants, admin: {}", request.getParticipants().size(), adminUsername);
+        
+        BatchSendGiftCardResult result = new BatchSendGiftCardResult();
+        result.setTotalRequested(request.getParticipants().size());
+        
+        // Check pool availability upfront
+        long availableCards = giftCardPoolRepository.countAvailable();
+        if (availableCards < request.getParticipants().size()) {
+            log.warn("Insufficient gift cards in pool. Available: {}, Requested: {}", availableCards, request.getParticipants().size());
+        }
+        
+        // Process each participant
+        for (BatchSendGiftCardRequest.ParticipantInvitationPair pair : request.getParticipants()) {
+            try {
+                // Create a SendGiftCardRequest for this participant
+                SendGiftCardRequest sendRequest = new SendGiftCardRequest();
+                sendRequest.setInvitationId(pair.getInvitationId());
+                sendRequest.setDeliveryMethod(request.getDeliveryMethod());
+                sendRequest.setNotes(request.getNotes());
+                
+                // Send the gift card
+                GiftCardDto giftCard = sendGiftCard(pair.getParticipantId(), sendRequest, adminUsername);
+                
+                // Get participant info for result
+                Participant participant = participantRepository.findById(pair.getParticipantId())
+                        .orElse(null);
+                
+                BatchSendGiftCardResult.SuccessResult success = new BatchSendGiftCardResult.SuccessResult();
+                success.setParticipantId(pair.getParticipantId());
+                success.setInvitationId(pair.getInvitationId());
+                success.setGiftCardId(giftCard.getId());
+                success.setParticipantPhone(participant != null ? participant.getPhone() : null);
+                success.setParticipantEmail(participant != null ? participant.getEmail() : null);
+                
+                result.getSuccesses().add(success);
+                result.setSuccessful(result.getSuccessful() + 1);
+                
+            } catch (Exception e) {
+                log.error("Failed to send gift card to participant {}: {}", pair.getParticipantId(), e.getMessage());
+                
+                // Get participant info for error result
+                Participant participant = participantRepository.findById(pair.getParticipantId())
+                        .orElse(null);
+                
+                BatchSendGiftCardResult.FailureResult failure = new BatchSendGiftCardResult.FailureResult();
+                failure.setParticipantId(pair.getParticipantId());
+                failure.setInvitationId(pair.getInvitationId());
+                failure.setParticipantPhone(participant != null ? participant.getPhone() : null);
+                failure.setParticipantEmail(participant != null ? participant.getEmail() : null);
+                failure.setErrorMessage(e.getMessage() != null ? e.getMessage() : "Unknown error");
+                
+                result.getFailures().add(failure);
+                result.setFailed(result.getFailed() + 1);
+            }
+        }
+        
+        log.info("Batch send completed. Success: {}, Failed: {}", result.getSuccessful(), result.getFailed());
+        return result;
     }
 
     @Override
@@ -298,13 +385,27 @@ public class GiftCardServiceImpl implements GiftCardService {
         GiftCard giftCard = giftCardRepository.findById(giftCardId)
                 .orElseThrow(() -> new NotFoundException("Gift card not found: " + giftCardId));
 
-        // Resend via email/SMS
-        boolean emailSent = sendGiftCardEmail(giftCard);
+        // Resend via email/SMS with detailed error tracking
+        EmailSendResult emailResult = sendGiftCardEmailWithDetails(giftCard);
+        boolean emailSent = emailResult.isSuccess();
         boolean smsSent = sendGiftCardSms(giftCard);
 
-        // Log the resend
-        logDistributionAction(giftCard.getId(), DistributionAction.RESENT, adminUsername, 
-                Map.of("email_sent", emailSent, "sms_sent", smsSent));
+        // Log the resend with detailed error information
+        Map<String, Object> resendDetails = new HashMap<>();
+        resendDetails.put("email_sent", emailSent);
+        resendDetails.put("sms_sent", smsSent);
+        resendDetails.put("recipient_email", giftCard.getParticipant().getEmail());
+        resendDetails.put("recipient_phone", giftCard.getParticipant().getPhone());
+        if (!emailResult.isSuccess()) {
+            resendDetails.put("email_error_message", emailResult.getErrorMessage());
+            if (emailResult.getStatusCode() != null) {
+                resendDetails.put("email_status_code", emailResult.getStatusCode());
+            }
+            if (emailResult.getResponseBody() != null) {
+                resendDetails.put("email_response_body", emailResult.getResponseBody());
+            }
+        }
+        logDistributionAction(giftCard.getId(), DistributionAction.RESENT, adminUsername, resendDetails);
 
         return convertToDto(giftCard);
     }
@@ -408,9 +509,12 @@ public class GiftCardServiceImpl implements GiftCardService {
                         continue;
                     }
                     
-                    // Check for duplicates
-                    if (giftCardPoolRepository.existsByCardCode(cardCode)) {
-                        errors.add("Line " + lineNumber + ": Duplicate code: " + cardCode);
+                    // Check for duplicates and provide status information
+                    Optional<GiftCardPool> existingCard = giftCardPoolRepository.findByCardCode(cardCode);
+                    if (existingCard.isPresent()) {
+                        GiftCardPool existing = existingCard.get();
+                        String statusInfo = existing.getStatus() != null ? existing.getStatus().toString() : "unknown";
+                        errors.add("Line " + lineNumber + ": Duplicate code: " + cardCode + " (Status: " + statusInfo + ")");
                         continue;
                     }
 
@@ -490,7 +594,14 @@ public class GiftCardServiceImpl implements GiftCardService {
 
     @Override
     public Page<GiftCardPoolDto> getGiftCardsFromPool(PoolStatus status, String code, Pageable pageable) {
-        Page<GiftCardPool> poolCards = giftCardPoolRepository.findByStatusAndCode(status, code, pageable);
+        Page<GiftCardPool> poolCards;
+        // If both filters are null, use the optimized findAllOrdered query
+        if (status == null && (code == null || code.trim().isEmpty())) {
+            poolCards = giftCardPoolRepository.findAllOrdered(pageable);
+        } else {
+            poolCards = giftCardPoolRepository.findByStatusAndCode(status, code, pageable);
+        }
+        log.debug("Fetched {} pool cards (status={}, code={})", poolCards.getTotalElements(), status, code);
         return poolCards.map(this::convertPoolToDto);
     }
 
@@ -671,6 +782,11 @@ public class GiftCardServiceImpl implements GiftCardService {
 
     // Helper methods
     private boolean sendGiftCardEmail(GiftCard giftCard) {
+        EmailSendResult result = sendGiftCardEmailWithDetails(giftCard);
+        return result.isSuccess();
+    }
+    
+    private EmailSendResult sendGiftCardEmailWithDetails(GiftCard giftCard) {
         try {
             String subject = "Your Gift Card - Howard Research Study";
             String htmlContent = buildGiftCardEmailHtml(giftCard);
@@ -679,14 +795,14 @@ public class GiftCardServiceImpl implements GiftCardService {
             String name = giftCard.getParticipant().getName();
             
             if (email == null || email.trim().isEmpty()) {
-                log.warn("Cannot send email - participant has no email address");
-                return false;
+                log.warn("Cannot send email - participant has no email address for gift card {}", giftCard.getId());
+                return EmailSendResult.failure("Participant has no email address");
             }
             
-            return emailService.sendGiftCard(email, name, subject, htmlContent);
+            return emailService.sendGiftCardWithDetails(email, name, subject, htmlContent);
         } catch (Exception e) {
-            log.error("Failed to send gift card email: {}", e.getMessage(), e);
-            return false;
+            log.error("Failed to send gift card email for gift card {}: {}", giftCard.getId(), e.getMessage(), e);
+            return EmailSendResult.failure("Exception: " + (e.getMessage() != null ? e.getMessage() : "Unknown error"));
         }
     }
 
@@ -844,5 +960,43 @@ public class GiftCardServiceImpl implements GiftCardService {
                 poolCard.getAssignedAt(),
                 poolCard.getAssignedToGiftCardId()
         );
+    }
+
+    @Override
+    @Transactional
+    public int cleanupOrphanedAssignedPoolCards() {
+        log.info("Starting cleanup of orphaned ASSIGNED pool cards");
+        
+        // Find all ASSIGNED pool cards
+        List<GiftCardPool> assignedCards = giftCardPoolRepository.findAll().stream()
+                .filter(card -> card.getStatus() == PoolStatus.ASSIGNED)
+                .collect(Collectors.toList());
+        
+        // Find all gift card IDs that exist
+        Set<UUID> existingGiftCardIds = giftCardRepository.findAll().stream()
+                .map(GiftCard::getId)
+                .collect(Collectors.toSet());
+        
+        // Find orphaned cards (ASSIGNED but assignedToGiftCardId doesn't exist or is null)
+        List<GiftCardPool> orphanedCards = assignedCards.stream()
+                .filter(card -> {
+                    UUID assignedToId = card.getAssignedToGiftCardId();
+                    return assignedToId == null || !existingGiftCardIds.contains(assignedToId);
+                })
+                .collect(Collectors.toList());
+        
+        // Reset orphaned cards to AVAILABLE
+        int cleanedCount = 0;
+        for (GiftCardPool card : orphanedCards) {
+            card.setStatus(PoolStatus.AVAILABLE);
+            card.setAssignedAt(null);
+            card.setAssignedToGiftCardId(null);
+            giftCardPoolRepository.save(card);
+            cleanedCount++;
+            log.debug("Reset orphaned pool card {} to AVAILABLE", card.getId());
+        }
+        
+        log.info("Cleanup completed. Found {} orphaned cards, reset {} to AVAILABLE", orphanedCards.size(), cleanedCount);
+        return cleanedCount;
     }
 }

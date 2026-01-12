@@ -157,6 +157,8 @@ const GiftCardManagement: React.FC = () => {
     fetchNextAvailableCard();
   }, [showSendModal]);
   const [showBulkSendModal, setShowBulkSendModal] = useState(false);
+  const [showBulkSendResults, setShowBulkSendResults] = useState(false);
+  const [bulkSendResults, setBulkSendResults] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [confirmationText, setConfirmationText] = useState('');
   
@@ -284,11 +286,17 @@ const GiftCardManagement: React.FC = () => {
   const fetchPoolData = async () => {
     try {
       const status = poolStatusFilter === 'ALL' ? null : poolStatusFilter;
+      console.log('Fetching pool data:', { status, poolPage, poolPageSize, poolSearch });
       const response = await api.getGiftCardsFromPool(status, poolPage, poolPageSize, poolSearch.trim() || undefined);
+      console.log('Pool data response:', response);
+      console.log('Response content:', response.content);
+      console.log('Response totalPages:', response.totalPages);
+      console.log('Response totalElements:', response.totalElements);
       setPoolCards(response.content || []);
       setPoolTotalPages(response.totalPages ?? 0);
     } catch (error) {
       console.error('Error fetching pool cards:', error);
+      setMessage({ type: 'error', text: `Failed to fetch pool cards: ${error instanceof Error ? error.message : 'Unknown error'}` });
     }
   };
 
@@ -381,9 +389,8 @@ const GiftCardManagement: React.FC = () => {
       if (result.failedUploads > 0) {
         messageText += `, ${result.failedUploads} failed`;
         if (result.errors && result.errors.length > 0) {
-          // Show first 3 errors as examples
-          const errorPreview = result.errors.slice(0, 3).join('; ');
-          messageText += `. Errors: ${errorPreview}${result.errors.length > 3 ? '...' : ''}`;
+          // Show all errors
+          messageText += `. Errors: ${result.errors.join('; ')}`;
         }
       }
       setMessage({ 
@@ -392,6 +399,10 @@ const GiftCardManagement: React.FC = () => {
       });
       setShowUploadModal(false);
       setUploadData({ file: null });
+      // Reset filters and pagination to show all cards
+      setPoolStatusFilter('ALL');
+      setPoolPage(0);
+      setPoolSearch('');
       await fetchPoolStatus();
       await fetchPoolData();
     } catch (error: any) {
@@ -615,51 +626,37 @@ const GiftCardManagement: React.FC = () => {
 
     setLoading(true);
     setShowBulkSendModal(false);
-    
-    const results: { success: number; failed: number; errors: string[] } = {
-      success: 0,
-      failed: 0,
-      errors: []
-    };
 
     try {
-      // Send gift cards to each selected participant
-      for (let i = 0; i < selectedParticipantIds.length; i++) {
-        const participantId = selectedParticipantIds[i];
+      // Prepare participants for batch send
+      const participants = selectedParticipantIds.map(participantId => {
         const participant = eligibleParticipants.find((p) => p.participantId === participantId);
-        
         if (!participant) {
-          results.failed++;
-          results.errors.push(`Participant ${participantId} not found`);
-          continue;
+          throw new Error(`Participant ${participantId} not found`);
         }
+        return {
+          participantId: participant.participantId,
+          invitationId: participant.invitationId
+        };
+      });
 
-        try {
-          // Backend will automatically select from pool
-          const sendData = {
-            invitationId: participant.invitationId,
-            deliveryMethod: deliveryMethod,
-            notes: ''
-          };
+      // Use batch endpoint
+      const result = await api.batchSendGiftCards(participants, deliveryMethod, '');
 
-          await api.sendGiftCard(participant.participantId, sendData);
-          results.success++;
-        } catch (error: any) {
-          results.failed++;
-          results.errors.push(`${participant.participantPhone}: ${error.message || 'Failed to send'}`);
-        }
-      }
+      // Store results and show modal
+      setBulkSendResults(result);
+      setShowBulkSendResults(true);
 
-      // Show results
-      if (results.failed === 0) {
+      // Show summary message
+      if (result.failed === 0) {
         setMessage({ 
           type: 'success', 
-          text: `Successfully sent ${results.success} gift card${results.success !== 1 ? 's' : ''}!` 
+          text: `Successfully sent ${result.successful} gift card${result.successful !== 1 ? 's' : ''}!` 
         });
       } else {
         setMessage({ 
           type: 'error', 
-          text: `Sent ${results.success} gift card${results.success !== 1 ? 's' : ''}, ${results.failed} failed. ${results.errors.slice(0, 3).join('; ')}${results.errors.length > 3 ? '...' : ''}` 
+          text: `Sent ${result.successful} gift card${result.successful !== 1 ? 's' : ''}, ${result.failed} failed. See details below.` 
         });
       }
 
@@ -2434,6 +2431,119 @@ const GiftCardManagement: React.FC = () => {
                   {loading ? 'Sending...' : `Send to ${selectedParticipantIds.length} Participant${selectedParticipantIds.length !== 1 ? 's' : ''}`}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Send Results Modal */}
+      {showBulkSendResults && bulkSendResults && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Bulk Send Results
+                </h3>
+                <button
+                  onClick={() => setShowBulkSendResults(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Summary */}
+              <div className="mb-6 grid grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="text-sm font-medium text-blue-900">Total Requested</div>
+                  <div className="text-2xl font-bold text-blue-600 mt-1">{bulkSendResults.totalRequested}</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="text-sm font-medium text-green-900">Successful</div>
+                  <div className="text-2xl font-bold text-green-600 mt-1">{bulkSendResults.successful}</div>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="text-sm font-medium text-red-900">Failed</div>
+                  <div className="text-2xl font-bold text-red-600 mt-1">{bulkSendResults.failed}</div>
+                </div>
+              </div>
+
+              {/* Failures List */}
+              {bulkSendResults.failures && bulkSendResults.failures.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Failed Sends ({bulkSendResults.failures.length})</h4>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+                    <div className="space-y-2">
+                      {bulkSendResults.failures.map((failure: any, index: number) => (
+                        <div key={index} className="bg-white p-3 rounded border border-red-100">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-gray-900">
+                                {failure.participantPhone || failure.participantEmail || `Participant ${failure.participantId}`}
+                              </div>
+                              {failure.participantEmail && failure.participantPhone && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {failure.participantEmail} • {failure.participantPhone}
+                                </div>
+                              )}
+                              <div className="text-sm text-red-600 mt-1 font-medium">
+                                {failure.errorMessage}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Successes List (collapsible) */}
+              {bulkSendResults.successes && bulkSendResults.successes.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Successful Sends ({bulkSendResults.successes.length})</h4>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+                    <div className="space-y-2">
+                      {bulkSendResults.successes.map((success: any, index: number) => (
+                        <div key={index} className="bg-white p-3 rounded border border-green-100">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-gray-900">
+                                {success.participantPhone || success.participantEmail || `Participant ${success.participantId}`}
+                              </div>
+                              {success.participantEmail && success.participantPhone && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {success.participantEmail} • {success.participantPhone}
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-500 mt-1">
+                                Gift Card ID: {success.giftCardId}
+                              </div>
+                            </div>
+                            <svg className="w-5 h-5 text-green-600 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex-shrink-0 flex justify-end">
+              <button
+                onClick={() => setShowBulkSendResults(false)}
+                className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
