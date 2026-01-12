@@ -197,7 +197,7 @@ public class AdminGiftCardController {
      * Get gift cards from pool with optional status filter
      */
     @GetMapping("/pool")
-    public ResponseEntity<Page<GiftCardPoolDto>> getGiftCardsFromPool(
+    public ResponseEntity<?> getGiftCardsFromPool(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String code,
             @RequestParam(defaultValue = "0") int page,
@@ -206,17 +206,32 @@ public class AdminGiftCardController {
         log.info("GET /pool - status={}, code={}, page={}, size={}", status, code, page, size);
         Pageable pageable = PageRequest.of(page, size);
         PoolStatus poolStatus = null;
-        if (status != null && !status.isEmpty()) {
+        if (status != null && !status.trim().isEmpty()) {
             try {
-                poolStatus = PoolStatus.valueOf(status.toUpperCase());
+                poolStatus = PoolStatus.valueOf(status.trim().toUpperCase());
             } catch (IllegalArgumentException e) {
-                log.warn("Invalid status parameter: {}", status);
-                return ResponseEntity.badRequest().build();
+                log.warn("Invalid status parameter: {}", status, e);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("ok", false);
+                errorResponse.put("error", "Invalid status parameter: " + status + ". Valid values are: AVAILABLE, ASSIGNED, EXPIRED, INVALID");
+                errorResponse.put("status", HttpStatus.BAD_REQUEST.value());
+                return ResponseEntity.badRequest().body(errorResponse);
             }
         }
-        Page<GiftCardPoolDto> giftCards = giftCardService.getGiftCardsFromPool(poolStatus, code, pageable);
-        log.info("GET /pool - returning {} cards (total: {})", giftCards.getNumberOfElements(), giftCards.getTotalElements());
-        return ResponseEntity.ok(giftCards);
+        // Normalize code - convert empty string to null
+        String normalizedCode = (code == null || code.trim().isEmpty()) ? null : code.trim();
+        try {
+            Page<GiftCardPoolDto> giftCards = giftCardService.getGiftCardsFromPool(poolStatus, normalizedCode, pageable);
+            log.info("GET /pool - returning {} cards (total: {})", giftCards.getNumberOfElements(), giftCards.getTotalElements());
+            return ResponseEntity.ok(giftCards);
+        } catch (Exception e) {
+            log.error("Error fetching gift cards from pool", e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("ok", false);
+            errorResponse.put("error", "Failed to fetch gift cards: " + e.getMessage());
+            errorResponse.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     /**
@@ -375,14 +390,14 @@ public class AdminGiftCardController {
                         </div>
                         
                         <div style="background-color: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
-                            <a href="https://www.amazon.com/gc/redeem" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                            <a href="%s" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
                                 Redeem Your Gift Card
                             </a>
                         </div>
                         
                         <p><strong>How to redeem:</strong></p>
                         <ol>
-                            <li>Click the "Redeem Your Gift Card" button above or visit <a href="https://www.amazon.com/gc/redeem">https://www.amazon.com/gc/redeem</a></li>
+                            <li>Click the "Redeem Your Gift Card" button above or visit <a href="%s">%s</a></li>
                             <li>Enter your gift card code: <strong>%s</strong></li>
                             <li>Follow the instructions to add it to your Amazon account</li>
                         </ol>
@@ -403,7 +418,7 @@ public class AdminGiftCardController {
                     </div>
                 </body>
                 </html>
-                """, testName, testCode, testCode);
+                """, testName, testCode, "https://www.amazon.com/gc/redeem", "https://www.amazon.com/gc/redeem", "https://www.amazon.com/gc/redeem", testCode);
             
             String subject = "Your Gift Card - Howard Research Study (TEST)";
             edu.howard.research.smsbackend.models.dto.EmailSendResult result = 

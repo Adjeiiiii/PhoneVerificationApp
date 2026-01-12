@@ -29,9 +29,16 @@ public class EmailService {
 
     public boolean sendSurveyLink(String toEmail, String participantName, String surveyLink) {
         try {
+            // Validate that we have a link
+            if (surveyLink == null || surveyLink.trim().isEmpty()) {
+                log.error("Cannot send survey link email - surveyLink is null or empty for {}", toEmail);
+                return false;
+            }
+            
             Email from = new Email(fromEmail, fromName);
             String subject = "HCAI (Howard University Research) Survey Link";
             
+            log.debug("Building survey link email for {} with link: {}", toEmail, surveyLink);
             String htmlContent = buildSurveyLinkEmail(participantName, surveyLink);
             Content content = new Content("text/html", htmlContent);
             

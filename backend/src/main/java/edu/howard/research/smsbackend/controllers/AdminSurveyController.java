@@ -527,13 +527,22 @@ public class AdminSurveyController {
 
         SurveyInvitation inv = invOpt.get();
 
-        // 2) Send SMS - use short link if available, otherwise use long link
+        // Check if this is a reminder (has been sent before) or first-time send
+        boolean isReminder = inv.getQueuedAt() != null || inv.getSentAt() != null;
+        
+        // 2) Send SMS - use the SAME link from the original invitation (short link if available, otherwise long link)
+        // This ensures reminders use the exact same link that was originally sent
         String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 
                 ? inv.getShortLinkUrl() 
                 : inv.getLinkUrl();
         
-        // Check if this is a reminder (has been sent before) or first-time send
-        boolean isReminder = inv.getQueuedAt() != null || inv.getSentAt() != null;
+        if (isReminder) {
+            log.info("Sending reminder for invitation {} - using original link: {} (shortLink: {}, longLink: {})", 
+                    inv.getId(), linkToSend, inv.getShortLinkUrl(), inv.getLinkUrl());
+        } else {
+            log.info("Sending first-time invitation for invitation {} - using link: {} (shortLink: {}, longLink: {})", 
+                    inv.getId(), linkToSend, inv.getShortLinkUrl(), inv.getLinkUrl());
+        }
         String smsBody;
         if (isReminder) {
             // Reminder message - more friendly and encouraging
@@ -548,6 +557,12 @@ public class AdminSurveyController {
         }
         
         Map<String, Object> send = smsService.send(phone, smsBody);
+
+        // Send email if participant has email address - use the same link as SMS (short link if available)
+        if (p.getEmail() != null && !p.getEmail().trim().isEmpty()) {
+            emailService.sendSurveyLink(p.getEmail(), p.getName(), linkToSend);
+            log.info("Email {} sent to {} for participant {}: {}", isReminder ? "reminder" : "invitation", p.getEmail(), phone, linkToSend);
+        }
 
         // 3) Persist queued state if accepted by Twilio
         if (Boolean.TRUE.equals(send.get("ok"))) {

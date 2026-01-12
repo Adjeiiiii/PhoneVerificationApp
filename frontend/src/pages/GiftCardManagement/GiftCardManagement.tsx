@@ -159,6 +159,8 @@ const GiftCardManagement: React.FC = () => {
   const [showBulkSendModal, setShowBulkSendModal] = useState(false);
   const [showBulkSendResults, setShowBulkSendResults] = useState(false);
   const [bulkSendResults, setBulkSendResults] = useState<any>(null);
+  const [showUploadResults, setShowUploadResults] = useState(false);
+  const [uploadResults, setUploadResults] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [confirmationText, setConfirmationText] = useState('');
   
@@ -342,10 +344,7 @@ const GiftCardManagement: React.FC = () => {
       return;
     }
     
-    if (newGiftCard.cardValue <= 0) {
-      setModalError('Card value must be greater than 0');
-      return;
-    }
+    // Card value is optional, no validation needed
     
     // Basic URL validation
     try {
@@ -385,18 +384,51 @@ const GiftCardManagement: React.FC = () => {
     setLoading(true);
     try {
       const result = await api.uploadGiftCards(uploadData.file);
-      let messageText = `Upload completed! ${result.successfulUploads} codes added`;
-      if (result.failedUploads > 0) {
-        messageText += `, ${result.failedUploads} failed`;
-        if (result.errors && result.errors.length > 0) {
-          // Show all errors
-          messageText += `. Errors: ${result.errors.join('; ')}`;
+      
+      // Store results and show modal if there are duplicates or failures
+      if (result.failedUploads > 0 || result.successfulUploads > 0) {
+        setUploadResults(result);
+        setShowUploadResults(true);
+      }
+      
+      // Check if all failures are duplicates (not actual errors)
+      const allFailuresAreDuplicates = result.errors && result.errors.length > 0 && 
+        result.errors.every((error: string) => error.includes('Duplicate code:'));
+      
+      // Show summary message
+      if (result.failedUploads === 0) {
+        setMessage({ 
+          type: 'success', 
+          text: `Successfully uploaded ${result.successfulUploads} gift card code${result.successfulUploads !== 1 ? 's' : ''}!`
+        });
+      } else if (result.successfulUploads === 0) {
+        // If all failures are duplicates, it's informational, not an error
+        if (allFailuresAreDuplicates) {
+          setMessage({ 
+            type: 'success', 
+            text: `All ${result.failedUploads} code${result.failedUploads !== 1 ? 's' : ''} already exist in the pool. See details below.`
+          });
+        } else {
+          setMessage({ 
+            type: 'error', 
+            text: `Upload failed: ${result.failedUploads} code${result.failedUploads !== 1 ? 's' : ''} could not be added. See details below.`
+          });
+        }
+      } else {
+        // Mixed results - some successful, some failed
+        if (allFailuresAreDuplicates) {
+          setMessage({ 
+            type: 'success', 
+            text: `Successfully added ${result.successfulUploads} code${result.successfulUploads !== 1 ? 's' : ''}. ${result.failedUploads} duplicate${result.failedUploads !== 1 ? 's' : ''} skipped. See details below.`
+          });
+        } else {
+          setMessage({ 
+            type: 'error', 
+            text: `Upload completed: ${result.successfulUploads} added, ${result.failedUploads} failed. See details below.`
+          });
         }
       }
-      setMessage({ 
-        type: result.failedUploads > 0 ? 'error' : 'success', 
-        text: messageText
-      });
+      
       setShowUploadModal(false);
       setUploadData({ file: null });
       // Reset filters and pagination to show all cards
@@ -911,12 +943,6 @@ const GiftCardManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
 
   return (
     <AdminLayout title="Gift Card Management" searchQuery={searchQuery} onSearchChange={handleSearchChange}>
@@ -1680,9 +1706,6 @@ const GiftCardManagement: React.FC = () => {
                             Type
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Value
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Participant
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1707,9 +1730,6 @@ const GiftCardManagement: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {card.cardType}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {formatCurrency(card.cardValue)}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-500">
                               <div className="flex flex-col">
@@ -1816,43 +1836,29 @@ const GiftCardManagement: React.FC = () => {
                   />
                 </div>
 
-                {/* Card Type and Value Row */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Card Type</label>
-                    <select
-                      value={newGiftCard.cardType}
-                      onChange={(e) => setNewGiftCard({ ...newGiftCard, cardType: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white text-gray-900 appearance-none cursor-pointer"
-                      style={{
-                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
-                        backgroundPosition: 'right 0.5rem center',
-                        backgroundRepeat: 'no-repeat',
-                        backgroundSize: '1.5em 1.5em',
-                        paddingRight: '2.5rem'
-                      }}
-                    >
-                      <option value="AMAZON">Amazon</option>
-                      <option value="VISA">Visa</option>
-                      <option value="MASTERCARD">Mastercard</option>
-                      <option value="APPLE">Apple</option>
-                      <option value="GOOGLE_PLAY">Google Play</option>
-                      <option value="STEAM">Steam</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Card Value ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={newGiftCard.cardValue}
-                      onChange={(e) => setNewGiftCard({ ...newGiftCard, cardValue: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                      placeholder="25.00"
-                    />
-                  </div>
+                {/* Card Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Card Type</label>
+                  <select
+                    value={newGiftCard.cardType}
+                    onChange={(e) => setNewGiftCard({ ...newGiftCard, cardType: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white text-gray-900 appearance-none cursor-pointer"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: 'right 0.5rem center',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundSize: '1.5em 1.5em',
+                      paddingRight: '2.5rem'
+                    }}
+                  >
+                    <option value="AMAZON">Amazon</option>
+                    <option value="VISA">Visa</option>
+                    <option value="MASTERCARD">Mastercard</option>
+                    <option value="APPLE">Apple</option>
+                    <option value="GOOGLE_PLAY">Google Play</option>
+                    <option value="STEAM">Steam</option>
+                    <option value="OTHER">Other</option>
+                  </select>
                 </div>
 
                 {/* Redemption URL */}
@@ -2540,6 +2546,131 @@ const GiftCardManagement: React.FC = () => {
             <div className="p-6 border-t border-gray-200 flex-shrink-0 flex justify-end">
               <button
                 onClick={() => setShowBulkSendResults(false)}
+                className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Results Modal */}
+      {showUploadResults && uploadResults && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Upload Results
+                </h3>
+                <button
+                  onClick={() => setShowUploadResults(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Summary */}
+              <div className="mb-6 grid grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="text-sm font-medium text-blue-900">Total Processed</div>
+                  <div className="text-2xl font-bold text-blue-600 mt-1">{uploadResults.totalRows || 0}</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="text-sm font-medium text-green-900">Successfully Added</div>
+                  <div className="text-2xl font-bold text-green-600 mt-1">{uploadResults.successfulUploads || 0}</div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="text-sm font-medium text-gray-900">Failed/Duplicates</div>
+                  <div className="text-2xl font-bold text-gray-700 mt-1">{uploadResults.failedUploads || 0}</div>
+                </div>
+              </div>
+
+              {/* Duplicates/Failures List */}
+              {uploadResults.errors && uploadResults.errors.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">
+                    {uploadResults.failedUploads === uploadResults.errors.length 
+                      ? `Duplicate Codes (${uploadResults.errors.length})` 
+                      : `Errors (${uploadResults.errors.length})`}
+                  </h4>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                    <div className="space-y-2">
+                      {uploadResults.errors.map((error: string, index: number) => {
+                        // Parse error message to extract code and status
+                        const duplicateMatch = error.match(/Duplicate code: ([^(]+) \(Status: ([^)]+)\)/);
+                        const codeMatch = error.match(/code: ([^(]+)/);
+                        const statusMatch = error.match(/Status: ([^)]+)/);
+                        
+                        const code = duplicateMatch ? duplicateMatch[1].trim() : (codeMatch ? codeMatch[1].trim() : error);
+                        const status = duplicateMatch ? duplicateMatch[2] : (statusMatch ? statusMatch[1] : null);
+                        
+                        return (
+                          <div key={index} className="bg-white p-3 rounded border border-gray-200 hover:border-gray-300 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900 font-mono">
+                                  {code}
+                                </div>
+                                {status && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Status: <span className="font-medium text-gray-700">{status}</span>
+                                  </div>
+                                )}
+                                {!duplicateMatch && (
+                                  <div className="text-xs text-gray-600 mt-1">
+                                    {error}
+                                  </div>
+                                )}
+                              </div>
+                              {status && (
+                                <span className={`ml-2 px-2 py-1 text-xs font-medium rounded ${
+                                  status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
+                                  status === 'ASSIGNED' ? 'bg-yellow-100 text-yellow-800' :
+                                  status === 'EXPIRED' ? 'bg-gray-100 text-gray-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {status}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {uploadResults.failedUploads === uploadResults.errors.length && (
+                    <p className="text-sm text-gray-600 mt-3">
+                      💡 These codes already exist in the pool. You can search for them in the pool table above.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Success Summary */}
+              {uploadResults.successfulUploads > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-sm text-green-800">
+                      <strong>{uploadResults.successfulUploads}</strong> gift card code{uploadResults.successfulUploads !== 1 ? 's' : ''} {uploadResults.successfulUploads === 1 ? 'was' : 'were'} successfully added to the pool.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex-shrink-0 flex justify-end">
+              <button
+                onClick={() => setShowUploadResults(false)}
                 className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
               >
                 Close

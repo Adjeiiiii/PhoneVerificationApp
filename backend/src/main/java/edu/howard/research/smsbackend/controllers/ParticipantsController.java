@@ -141,12 +141,16 @@ public class ParticipantsController {
                             || (invitation.getCreatedAt() != null 
                                 && invitation.getCreatedAt().isBefore(java.time.OffsetDateTime.now().minusMinutes(5)));
                     
-                    log.info("Resending survey link for phone: {}, isReminder: {}, queuedAt: {}, sentAt: {}", 
-                            phone, isReminder, invitation.getQueuedAt(), invitation.getSentAt());
+                    log.info("Resending survey link for phone: {}, isReminder: {}, queuedAt: {}, sentAt: {}, invitationId: {}", 
+                            phone, isReminder, invitation.getQueuedAt(), invitation.getSentAt(), invitation.getId());
                     
+                    // Use the SAME link from the original invitation (short link if available, otherwise long link)
                     String linkToSend = (invitation.getShortLinkUrl() != null && !invitation.getShortLinkUrl().isBlank()) 
                             ? invitation.getShortLinkUrl() 
                             : invitation.getLinkUrl();
+                    
+                    log.info("Using original invitation link for reminder - shortLink: {}, longLink: {}, finalLink: {}", 
+                            invitation.getShortLinkUrl(), invitation.getLinkUrl(), linkToSend);
                     
                     // Personalized message based on whether it's a reminder or first-time
                     String body;
@@ -164,11 +168,11 @@ public class ParticipantsController {
                     
                     Map<String, Object> send = smsService.send(phone, body);
                     
-                    // Send email if participant has email address
+                    // Send email if participant has email address - use the same link as SMS (short link if available)
                     boolean emailSent = false;
                     if (participant.getEmail() != null && !participant.getEmail().trim().isEmpty()) {
-                        emailSent = emailService.sendSurveyLink(participant.getEmail(), participant.getName(), invitation.getLinkUrl());
-                        log.info("Email resent to {} for participant {}: {}", participant.getEmail(), phone, emailSent ? "SUCCESS" : "FAILED");
+                        emailSent = emailService.sendSurveyLink(participant.getEmail(), participant.getName(), linkToSend);
+                        log.info("Email resent to {} for participant {}: {} (using link: {})", participant.getEmail(), phone, emailSent ? "SUCCESS" : "FAILED", linkToSend);
                     }
                     
                     // Update invitation status

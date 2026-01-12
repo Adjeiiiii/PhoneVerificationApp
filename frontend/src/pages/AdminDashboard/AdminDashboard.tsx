@@ -1438,7 +1438,6 @@ const AdminDashboard: React.FC = () => {
                                     <span className="text-xs font-semibold text-gray-900">{gc.cardCode}</span>
                                     <div className="flex items-center gap-2">
                                       <span className="text-xs text-gray-600">{gc.cardType}</span>
-                                      <span className="text-xs font-bold text-gray-900">${gc.cardValue}</span>
                                       {gc.status === 'SENT' && (
                                         <span className="px-1.5 py-0.5 text-xs font-medium bg-gray-200 text-gray-700 rounded">Sent</span>
                                       )}

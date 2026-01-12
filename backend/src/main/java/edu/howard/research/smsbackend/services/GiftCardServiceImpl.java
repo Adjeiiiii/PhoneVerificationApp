@@ -595,13 +595,24 @@ public class GiftCardServiceImpl implements GiftCardService {
     @Override
     public Page<GiftCardPoolDto> getGiftCardsFromPool(PoolStatus status, String code, Pageable pageable) {
         Page<GiftCardPool> poolCards;
-        // If both filters are null, use the optimized findAllOrdered query
-        if (status == null && (code == null || code.trim().isEmpty())) {
+        // Normalize empty code to null for query
+        String normalizedCode = (code == null || code.trim().isEmpty()) ? null : code.trim();
+        
+        // Convert PoolStatus to String for native queries
+        String statusString = (status != null) ? status.name() : null;
+        
+        // Route to appropriate query based on filters
+        if (status == null && normalizedCode == null) {
+            // No filters - use optimized findAllOrdered query
             poolCards = giftCardPoolRepository.findAllOrdered(pageable);
+        } else if (status != null && normalizedCode == null) {
+            // Status only - use status-only native query
+            poolCards = giftCardPoolRepository.findByStatus(statusString, pageable);
         } else {
-            poolCards = giftCardPoolRepository.findByStatusAndCode(status, code, pageable);
+            // Status and/or code - use combined native query
+            poolCards = giftCardPoolRepository.findByStatusAndCode(statusString, normalizedCode, pageable);
         }
-        log.debug("Fetched {} pool cards (status={}, code={})", poolCards.getTotalElements(), status, code);
+        log.debug("Fetched {} pool cards (status={}, code={})", poolCards.getTotalElements(), status, normalizedCode);
         return poolCards.map(this::convertPoolToDto);
     }
 
@@ -835,12 +846,11 @@ public class GiftCardServiceImpl implements GiftCardService {
                 
                 <p>Dear %s,</p>
                 
-                <p>As promised, here is your $%s %s gift card:</p>
+                <p>As promised, here is your %s gift card:</p>
                 
                 <div style="border: 2px solid #ff9900; padding: 20px; margin: 20px 0; text-align: center;">
                     <h3>🎁 Your %s Gift Card</h3>
                     <p><strong>Code:</strong> %s</p>
-                    <p><strong>Value:</strong> $%s</p>
                     <p><strong>Expires:</strong> %s</p>
                     
                     <a href="%s" 
@@ -865,11 +875,9 @@ public class GiftCardServiceImpl implements GiftCardService {
             </html>
             """, 
             giftCard.getParticipant().getName() != null ? giftCard.getParticipant().getName() : "Participant",
-            giftCard.getCardValue() != null ? giftCard.getCardValue().toString() : "N/A",
             giftCard.getCardType() != null ? giftCard.getCardType().toString() : "AMAZON",
             giftCard.getCardType() != null ? giftCard.getCardType().toString() : "AMAZON",
             giftCard.getCardCode() != null ? giftCard.getCardCode() : "",
-            giftCard.getCardValue() != null ? giftCard.getCardValue().toString() : "N/A",
             giftCard.getExpiresAt() != null ? giftCard.getExpiresAt().toString() : "No expiration",
             giftCard.getRedemptionUrl() != null ? giftCard.getRedemptionUrl() : DEFAULT_REDEMPTION_URL,
             giftCard.getRedemptionUrl() != null ? giftCard.getRedemptionUrl() : DEFAULT_REDEMPTION_URL,
@@ -879,14 +887,13 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     private String buildGiftCardSmsMessage(GiftCard giftCard) {
-        String cardValue = giftCard.getCardValue() != null ? giftCard.getCardValue().toString() : "N/A";
         String cardType = giftCard.getCardType() != null ? giftCard.getCardType().toString() : "AMAZON";
         String cardCode = giftCard.getCardCode() != null ? giftCard.getCardCode() : "";
         String redemptionUrl = giftCard.getRedemptionUrl() != null ? giftCard.getRedemptionUrl() : DEFAULT_REDEMPTION_URL;
         String expiresAt = giftCard.getExpiresAt() != null ? giftCard.getExpiresAt().toString() : "No expiration";
         
         return String.format("""
-            🎁 Your $%s %s gift card is ready!
+            🎁 Your %s gift card is ready!
             
             Code: %s
             Redeem: %s
@@ -895,7 +902,6 @@ public class GiftCardServiceImpl implements GiftCardService {
             
             Questions? Call (240) 428-8442
             """,
-            cardValue,
             cardType,
             cardCode,
             redemptionUrl,

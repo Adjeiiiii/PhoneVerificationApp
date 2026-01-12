@@ -32,22 +32,28 @@ public interface GiftCardPoolRepository extends JpaRepository<GiftCardPool, UUID
     Page<GiftCardPool> findAvailable(Pageable pageable);
 
     /**
-     * Find gift cards by status
+     * Find gift cards by status (using native query to handle bytea column type)
      */
-    @Query("SELECT gcp FROM GiftCardPool gcp WHERE gcp.status = :status ORDER BY gcp.uploadedAt DESC")
-    Page<GiftCardPool> findByStatus(@Param("status") PoolStatus status, Pageable pageable);
+    @Query(value = """
+        SELECT * FROM gift_card_pool gcp
+        WHERE gcp.status = :status
+        ORDER BY gcp.uploaded_at DESC
+    """, nativeQuery = true)
+    Page<GiftCardPool> findByStatus(@Param("status") String status, Pageable pageable);
 
     /**
      * Find gift cards by optional status and code search (case-insensitive, contains)
+     * Using native query to properly handle text casting in PostgreSQL
+     * Casts card_code to text to handle cases where it might be stored as bytea
      */
-    @Query("""
-        SELECT gcp FROM GiftCardPool gcp
+    @Query(value = """
+        SELECT * FROM gift_card_pool gcp
         WHERE (:status IS NULL OR gcp.status = :status)
-          AND (:code IS NULL OR LOWER(gcp.cardCode) LIKE LOWER(CONCAT('%', :code, '%')))
-        ORDER BY gcp.uploadedAt DESC
-    """)
+          AND (:code IS NULL OR LOWER(gcp.card_code::text) LIKE LOWER('%' || :code || '%'))
+        ORDER BY gcp.uploaded_at DESC
+    """, nativeQuery = true)
     Page<GiftCardPool> findByStatusAndCode(
-            @Param("status") PoolStatus status,
+            @Param("status") String status,
             @Param("code") String code,
             Pageable pageable);
 
