@@ -240,11 +240,11 @@ public class GiftCardServiceImpl implements GiftCardService {
 
             // Release the pool card back to AVAILABLE
             if (giftCard.getPoolId() != null) {
-                giftCardPoolRepository.findById(giftCard.getPoolId()).ifPresent(poolCard -> {
-                    poolCard.setStatus(PoolStatus.AVAILABLE);
-                    poolCard.setAssignedAt(null);
-                    poolCard.setAssignedToGiftCardId(null);
-                    giftCardPoolRepository.save(poolCard);
+                giftCardPoolRepository.findById(giftCard.getPoolId()).ifPresent(availableCard -> {
+                    availableCard.setStatus(PoolStatus.AVAILABLE);
+                    availableCard.setAssignedAt(null);
+                    availableCard.setAssignedToGiftCardId(null);
+                    giftCardPoolRepository.save(availableCard);
                 });
             }
 
