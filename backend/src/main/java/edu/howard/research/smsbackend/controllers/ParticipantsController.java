@@ -217,6 +217,14 @@ public class ParticipantsController {
                     "message", "Survey link sent successfully!"
                 ));
             } else {
+                // Check for enrollment full scenario
+                if ("enrollment_full".equals(result.reason())) {
+                    return ResponseEntity.ok(Map.of(
+                        "ok", false,
+                        "error", "enrollment_full",
+                        "message", "Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442."
+                    ));
+                }
                 // Check if it's a "no links available" scenario
                 if ("no_links_available".equals(result.reason())) {
                     // Verification succeeded, but no links available - return ok: true with no linkUrl

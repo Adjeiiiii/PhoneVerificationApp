@@ -12,6 +12,7 @@ import AdminLogin from './pages/AdminLogin/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard/AdminDashboard';
 import AdminDBOps from './pages/AdminDBOps/AdminDBOps';
 import GiftCardManagement from './pages/GiftCardManagement/GiftCardManagement';
+import EnrollmentManagement from './pages/EnrollmentManagement/EnrollmentManagement';
 
 // Protected Routes
 import { ProtectedRoute } from './routes/ProtectedRoute';
@@ -51,6 +52,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <GiftCardManagement />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin-enrollment" 
+                element={
+                  <ProtectedRoute>
+                    <EnrollmentManagement />
                   </ProtectedRoute>
                 } 
               />

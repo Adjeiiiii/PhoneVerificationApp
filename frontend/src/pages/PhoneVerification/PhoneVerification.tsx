@@ -170,6 +170,20 @@ const PhoneVerification: React.FC = () => {
       const data = await api.checkOtp(phoneNumber, code, email, undefined);
       
       if (data.verified) {
+        // Checkpoint 2: Check enrollment status before assigning survey link
+        try {
+          const enrollmentStatus = await api.getEnrollmentStatus();
+          if (enrollmentStatus.isFull) {
+            setVerificationError('enrollment_full');
+            showNotification('error', 'Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.');
+            setIsLoading(false);
+            return;
+          }
+        } catch (enrollmentError) {
+          console.error('Failed to check enrollment status:', enrollmentError);
+          // Continue if enrollment check fails (fail open)
+        }
+        
         // Send survey invitation
         try {
           const invitationData = await api.sendSurveyInvitation(phoneNumber);
@@ -191,9 +205,15 @@ const PhoneVerification: React.FC = () => {
               showNotification('info', invitationData.message || 'Verified! A survey link will be assigned shortly.');
             }
           } else {
-            // Actual error
-            setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
-            showNotification('error', invitationData.message || 'Could not retrieve survey link. Please try again.');
+            // Check if it's an enrollment full error
+            if (invitationData.error === 'enrollment_full' || invitationData.message?.includes('maximum number of participants')) {
+              setVerificationError('enrollment_full');
+              showNotification('error', invitationData.message || 'Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.');
+            } else {
+              // Actual error
+              setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
+              showNotification('error', invitationData.message || 'Could not retrieve survey link. Please try again.');
+            }
             setCodeDigits(Array(6).fill(''));
             const firstBox = document.getElementById('otp-0') as HTMLInputElement;
             if (firstBox) firstBox.focus();
@@ -208,8 +228,14 @@ const PhoneVerification: React.FC = () => {
           if (firstBox) firstBox.focus();
         }
       } else {
-        setVerificationError("That code didn't work. Try again or resend.");
-        showNotification('error', 'Invalid verification code. Please try again.');
+        // Check if it's an enrollment full error
+        if (data.error === 'enrollment_full' || data.message?.includes('maximum number of participants')) {
+          setVerificationError('enrollment_full');
+          showNotification('error', data.message || 'Thank you for your interest in participating in our research study. Unfortunately, we have reached our maximum number of participants for this study. We appreciate your interest and encourage you to check back in the future. If you have any questions, please contact us at (240) 428-8442.');
+        } else {
+          setVerificationError("That code didn't work. Try again or resend.");
+          showNotification('error', 'Invalid verification code. Please try again.');
+        }
         setCodeDigits(Array(6).fill(''));
         const firstBox = document.getElementById('otp-0') as HTMLInputElement;
         if (firstBox) firstBox.focus();

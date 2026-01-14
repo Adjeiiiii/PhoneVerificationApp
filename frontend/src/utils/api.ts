@@ -437,4 +437,20 @@ export const api = {
   deleteUser: async (userId: string) => {
     return api.delete(`/api/admin/delete-user/${userId}`);
   },
+
+  // Enrollment Management
+  getEnrollmentStatus: async () => {
+    return api.get('/api/enrollment/status');
+  },
+
+  getEnrollmentConfig: async () => {
+    return api.get('/api/admin/enrollment/config');
+  },
+
+  updateEnrollmentConfig: async (maxParticipants: number | null, isEnrollmentActive: boolean | null) => {
+    return api.put('/api/admin/enrollment/config', {
+      maxParticipants,
+      isEnrollmentActive
+    });
+  },
 };

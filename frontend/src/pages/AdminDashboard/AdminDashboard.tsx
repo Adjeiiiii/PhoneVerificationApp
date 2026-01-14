@@ -42,6 +42,7 @@ const AdminDashboard: React.FC = () => {
   const [verifiedWithoutInvitations, setVerifiedWithoutInvitations] = useState<any[]>([]);
   const [availableLinks, setAvailableLinks] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [enrollmentConfig, setEnrollmentConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'invitations' | 'waiting'>('invitations');
   const [showLinkSelectionModal, setShowLinkSelectionModal] = useState(false);
   const [selectedParticipantForLink, setSelectedParticipantForLink] = useState<any>(null);
@@ -274,6 +275,15 @@ const AdminDashboard: React.FC = () => {
       .catch((err) => {
         console.error('Available links error:', err);
         setAvailableLinks([]);
+      });
+
+    // 5) Fetch enrollment config
+    api.getEnrollmentConfig()
+      .then((data: any) => {
+        setEnrollmentConfig(data);
+      })
+      .catch((err) => {
+        console.error('Enrollment config error:', err);
       });
   };
 
@@ -684,6 +694,70 @@ const AdminDashboard: React.FC = () => {
       onSearchChange={handleSearchChange}
     >
       <div className="container mx-auto px-6 py-6 flex-1 flex flex-col overflow-hidden">
+          {/* Enrollment Status Widget */}
+          {enrollmentConfig && (
+            <div className="bg-white rounded-lg shadow mb-4 p-4 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 mb-1">Enrollment Status</h3>
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl font-bold text-gray-900">
+                          {enrollmentConfig.currentCount} / {enrollmentConfig.maxParticipants === null ? '∞' : enrollmentConfig.maxParticipants}
+                        </span>
+                        {enrollmentConfig.maxParticipants !== null && (
+                          <div className="w-32 bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${
+                                (enrollmentConfig.currentCount / enrollmentConfig.maxParticipants) >= 0.9
+                                  ? 'bg-red-500'
+                                  : (enrollmentConfig.currentCount / enrollmentConfig.maxParticipants) >= 0.7
+                                  ? 'bg-yellow-500'
+                                  : 'bg-green-500'
+                              }`}
+                              style={{
+                                width: `${Math.min(100, (enrollmentConfig.currentCount / enrollmentConfig.maxParticipants) * 100)}%`
+                              }}
+                            ></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {enrollmentConfig.maxParticipants !== null && (
+                      <div className="flex-1">
+                        <div className="text-sm">
+                          <span className={`font-semibold ${
+                            enrollmentConfig.status === 'OPEN' ? 'text-green-600' :
+                            enrollmentConfig.status === 'FULL' ? 'text-red-600' :
+                            enrollmentConfig.status === 'DISABLED' ? 'text-gray-600' :
+                            'text-blue-600'
+                          }`}>
+                            {enrollmentConfig.status === 'OPEN' ? '✅ Open' :
+                             enrollmentConfig.status === 'FULL' ? '⚠️ Full' :
+                             enrollmentConfig.status === 'DISABLED' ? '⛔ Disabled' :
+                             '✅ Unlimited'}
+                          </span>
+                          {enrollmentConfig.remainingSpots !== -1 && (
+                            <span className="text-gray-600 ml-2">
+                              ({enrollmentConfig.remainingSpots} spots remaining)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigate('/admin-enrollment')}
+                  className="ml-4 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  Manage Enrollment
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Notification Banner */}
           {bulkActionMessage && (
             <div className={`mb-4 p-4 rounded-md flex-shrink-0 ${

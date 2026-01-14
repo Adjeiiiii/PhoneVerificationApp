@@ -20,10 +20,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   const scrollPositions = useRef<Map<string, number>>(new Map());
   
   // Determine current page based on route
-  const getCurrentPage = (): 'dashboard' | 'database' | 'gift-cards' => {
+  const getCurrentPage = (): 'dashboard' | 'database' | 'gift-cards' | 'enrollment' => {
     if (location.pathname.includes('admin-dashboard')) return 'dashboard';
     if (location.pathname.includes('admin-ops')) return 'database';
     if (location.pathname.includes('admin-gift-cards')) return 'gift-cards';
+    if (location.pathname.includes('admin-enrollment')) return 'enrollment';
     return 'dashboard';
   };
 

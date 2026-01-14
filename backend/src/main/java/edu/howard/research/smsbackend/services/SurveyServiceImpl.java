@@ -35,11 +35,23 @@ public class SurveyServiceImpl implements SurveyService {
     private final EmailService emailService;
     private final PhoneNumberService phoneNumberService;
     private final GiftCardService giftCardService;
+    private final EnrollmentService enrollmentService;
 
     @Override
     @Transactional
     public AssignResult assignAndSendLink(String phone, @Nullable String batchLabel) {
         try {
+            // Checkpoint 2: Final enrollment check before assigning survey link
+            if (enrollmentService.isEnrollmentFull()) {
+                log.info("Enrollment full - cannot assign survey link for phone: {}", phone);
+                return new AssignResult(
+                    false, 
+                    "enrollment_full",
+                    null,
+                    null
+                );
+            }
+            
             // 1) normalize & upsert/find participant
             final String e164 = phoneNumberService.normalizeToE164(phone);
             Participant p = participantRepository.findByPhone(e164)

@@ -28,4 +28,10 @@ public interface ParticipantRepository extends JpaRepository<Participant, UUID> 
         ORDER BY p.verifiedAt DESC NULLS LAST, p.createdAt DESC
     """)
     Page<Participant> findVerifiedWithoutInvitations(Pageable pageable);
+
+    /**
+     * Count participants who have verified their phone number (enrolled participants)
+     */
+    @Query("SELECT COUNT(p) FROM Participant p WHERE p.verifiedAt IS NOT NULL")
+    long countVerifiedParticipants();
 }
