@@ -196,6 +196,8 @@ const GiftCardManagement: React.FC = () => {
   });
   
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [showGiftCardDetailsModal, setShowGiftCardDetailsModal] = useState(false);
+  const [selectedGiftCardDetails, setSelectedGiftCardDetails] = useState<GiftCard | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -1595,6 +1597,20 @@ const GiftCardManagement: React.FC = () => {
                                     >
                                       <button
                                         onClick={() => {
+                                          setSelectedGiftCardDetails(card);
+                                          setShowGiftCardDetailsModal(true);
+                                          setOpenSentActionMenuId(null);
+                                          setSentMenuPosition(null);
+                                        }}
+                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                                      >
+                                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>View Details</span>
+                                      </button>
+                                      <button
+                                        onClick={() => {
                                           const newRevealed = new Set(revealedCodes);
                                           if (newRevealed.has(card.id)) {
                                             newRevealed.delete(card.id);
@@ -2781,6 +2797,178 @@ const GiftCardManagement: React.FC = () => {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gift Card Details Modal */}
+      {showGiftCardDetailsModal && selectedGiftCardDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-auto max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900">Gift Card Details</h2>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowGiftCardDetailsModal(false);
+                    setSelectedGiftCardDetails(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-500 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-6 space-y-6">
+              {/* Participant Information */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Participant Information</h3>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  {selectedGiftCardDetails.participantPhone && (
+                    <div>
+                      <span className="text-xs text-gray-500">Phone:</span>
+                      <p className="text-sm font-medium text-gray-900">{selectedGiftCardDetails.participantPhone}</p>
+                    </div>
+                  )}
+                  {selectedGiftCardDetails.participantEmail && (
+                    <div>
+                      <span className="text-xs text-gray-500">Email:</span>
+                      <p className="text-sm font-medium text-gray-900">{selectedGiftCardDetails.participantEmail}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Gift Card Information */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Gift Card Information</h3>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs text-gray-500">Card Code:</span>
+                      <p className="text-sm font-mono font-medium text-gray-900 mt-1">{selectedGiftCardDetails.cardCode || '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500">Card Type:</span>
+                      <p className="text-sm font-medium text-gray-900 mt-1">{selectedGiftCardDetails.cardType || '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500">Status:</span>
+                      <div className="mt-1">
+                        <span className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm ${
+                          selectedGiftCardDetails.status === 'SENT' 
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                          selectedGiftCardDetails.status === 'DELIVERED' 
+                            ? 'bg-green-50 text-green-700 border border-green-200' :
+                          selectedGiftCardDetails.status === 'REDEEMED' 
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                          'bg-gray-50 text-gray-700 border border-gray-200'
+                        }`}>
+                          {selectedGiftCardDetails.status === 'SENT' && (
+                            <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                              <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                            </svg>
+                          )}
+                          {selectedGiftCardDetails.status === 'DELIVERED' && (
+                            <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                          {selectedGiftCardDetails.status === 'REDEEMED' && (
+                            <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                          {selectedGiftCardDetails.status}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500">Sent By:</span>
+                      <p className="text-sm font-medium text-gray-900 mt-1">{selectedGiftCardDetails.sentBy || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Timeline</h3>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  {selectedGiftCardDetails.sentAt && (
+                    <div>
+                      <span className="text-xs text-gray-500">Sent Date:</span>
+                      <p className="text-sm font-medium text-gray-900">{formatDate(selectedGiftCardDetails.sentAt)}</p>
+                    </div>
+                  )}
+                  {selectedGiftCardDetails.deliveredAt && (
+                    <div>
+                      <span className="text-xs text-gray-500">Delivered Date:</span>
+                      <p className="text-sm font-medium text-gray-900">{formatDate(selectedGiftCardDetails.deliveredAt)}</p>
+                    </div>
+                  )}
+                  {selectedGiftCardDetails.redeemedAt && (
+                    <div>
+                      <span className="text-xs text-gray-500">Redeemed Date:</span>
+                      <p className="text-sm font-medium text-gray-900">{formatDate(selectedGiftCardDetails.redeemedAt)}</p>
+                    </div>
+                  )}
+                  {selectedGiftCardDetails.expiresAt && (
+                    <div>
+                      <span className="text-xs text-gray-500">Expires At:</span>
+                      <p className="text-sm font-medium text-gray-900">{formatDate(selectedGiftCardDetails.expiresAt)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes */}
+              {selectedGiftCardDetails.notes && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Admin Notes</h3>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedGiftCardDetails.notes}</p>
+                  </div>
+                </div>
+              )}
+
+              {!selectedGiftCardDetails.notes && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Admin Notes</h3>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-500 italic">No notes added</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowGiftCardDetailsModal(false);
+                    setSelectedGiftCardDetails(null);
+                  }}
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
