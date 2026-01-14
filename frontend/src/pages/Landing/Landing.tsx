@@ -14,9 +14,14 @@ const Landing: React.FC = () => {
     const checkEnrollment = async () => {
       try {
         setLoadingEnrollment(true);
+        // Add timestamp to prevent caching
         const status = await api.getEnrollmentStatus();
+        console.log('Enrollment status:', status);
         // Enrollment is blocked if it's full OR if enrollment is disabled
-        setEnrollmentFull(status.isFull || !status.isEnrollmentActive);
+        // Note: JSON uses 'full' and 'enrollmentActive' (not 'isFull' and 'isEnrollmentActive')
+        const isBlocked = status.full || !status.enrollmentActive;
+        console.log('Enrollment blocked?', isBlocked, 'full:', status.full, 'enrollmentActive:', status.enrollmentActive);
+        setEnrollmentFull(isBlocked);
       } catch (error) {
         console.error('Failed to check enrollment status:', error);
         // On error, allow enrollment (fail open)
@@ -30,7 +35,9 @@ const Landing: React.FC = () => {
 
   const handleGetStarted = () => {
     if (consentChecked && !enrollmentFull) {
-      navigate('/survey');
+      // Mark consent as given before navigating
+      // This will be handled by the Survey page checking location state
+      navigate('/survey', { state: { fromLanding: true, consented: true } });
     }
   };
 

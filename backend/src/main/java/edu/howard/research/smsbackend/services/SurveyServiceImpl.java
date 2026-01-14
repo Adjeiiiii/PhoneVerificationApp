@@ -41,13 +41,15 @@ public class SurveyServiceImpl implements SurveyService {
     @Transactional
     public AssignResult assignAndSendLink(String phone, @Nullable String batchLabel) {
         try {
-            // Checkpoint 2: Final enrollment check before assigning survey link
+            // Final enrollment check before assigning survey link
+            // Enrollment counts participants who have received a survey link, not just verified phones
+            // This check happens BEFORE creating the invitation, preventing race conditions
             if (enrollmentService.isEnrollmentFull()) {
                 log.info("Enrollment full - cannot assign survey link for phone: {}", phone);
                 return new AssignResult(
                     false, 
                     "enrollment_full",
-                    null,
+                    "Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.",
                     null
                 );
             }

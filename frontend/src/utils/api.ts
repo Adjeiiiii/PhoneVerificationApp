@@ -440,7 +440,8 @@ export const api = {
 
   // Enrollment Management
   getEnrollmentStatus: async () => {
-    return api.get('/api/enrollment/status');
+    // Add timestamp to prevent browser caching
+    return api.get(`/api/enrollment/status?t=${Date.now()}`);
   },
 
   getEnrollmentConfig: async () => {

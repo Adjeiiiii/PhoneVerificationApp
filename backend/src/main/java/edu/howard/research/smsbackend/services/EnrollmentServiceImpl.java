@@ -21,7 +21,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     @Override
     public EnrollmentStatusDto getEnrollmentStatus() {
-        long currentCount = participantRepository.countVerifiedParticipants();
+        // Count participants who have received a survey link (enrolled), not just verified phones
+        long currentCount = participantRepository.countEnrolledParticipants();
         SurveyEnrollmentConfig config = getOrCreateConfig();
         
         Integer maxParticipants = config.getMaxParticipants();
@@ -54,7 +55,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     @Override
     public EnrollmentConfigDto getEnrollmentConfig() {
-        long currentCount = participantRepository.countVerifiedParticipants();
+        // Count participants who have received a survey link (enrolled), not just verified phones
+        long currentCount = participantRepository.countEnrolledParticipants();
         SurveyEnrollmentConfig config = getOrCreateConfig();
         
         Integer maxParticipants = config.getMaxParticipants();
@@ -90,7 +92,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
     public EnrollmentConfigDto updateEnrollmentConfig(UpdateEnrollmentConfigRequest request, String adminUsername) {
         SurveyEnrollmentConfig config = getOrCreateConfig();
         
-        long currentCount = participantRepository.countVerifiedParticipants();
+        // Count participants who have received a survey link (enrolled), not just verified phones
+        long currentCount = participantRepository.countEnrolledParticipants();
         
         // Validate: can't set limit below current enrollment
         if (request.getMaxParticipants() != null && request.getMaxParticipants() < currentCount) {

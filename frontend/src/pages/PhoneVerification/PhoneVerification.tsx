@@ -1,12 +1,20 @@
 // src/pages/PhoneVerification/PhoneVerification.tsx
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useVerification } from '../../contexts/VerificationProvider';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../../utils/api';
 
 const PhoneVerification: React.FC = () => {
-  const { setIsVerified, phoneNumber, email } = useVerification();
+  const {
+    setIsVerified,
+    phoneNumber,
+    email,
+    hasConsented,
+    hasCompletedSurvey,
+    hasProvidedContact,
+  } = useVerification();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [step, setStep] = useState<'sendCode' | 'enterCode' | 'done'>('sendCode');
   const [codeDigits, setCodeDigits] = useState<string[]>(Array(6).fill(''));
@@ -44,12 +52,34 @@ const PhoneVerification: React.FC = () => {
     };
   }, [step, timeLeft, canResend]);
 
-  // If no phoneNumber in context, redirect
+  // Route guard: Check if user has completed previous steps
   useEffect(() => {
-    if (!phoneNumber) {
-      navigate('/');
+    // Check if coming from survey page
+    const fromSurvey = location.state?.fromSurvey === true;
+    
+    // User must have:
+    // 1. Consented (hasConsented)
+    // 2. Completed survey screening (hasCompletedSurvey)
+    // 3. Provided contact info (hasProvidedContact)
+    // 4. Have a phone number
+    if (!hasConsented || !hasCompletedSurvey || !hasProvidedContact || !phoneNumber) {
+      // If they came from survey but missing steps, redirect to survey
+      if (fromSurvey && hasConsented && hasCompletedSurvey) {
+        // They're on the right track, just missing contact info - stay on verify page
+        // But if no phone number, redirect back
+        if (!phoneNumber) {
+          navigate('/survey', { replace: true });
+        }
+      } else {
+        // Missing earlier steps - redirect to landing or survey
+        if (!hasConsented) {
+          navigate('/', { replace: true });
+        } else if (!hasCompletedSurvey || !hasProvidedContact) {
+          navigate('/survey', { replace: true });
+        }
+      }
     }
-  }, [phoneNumber, navigate]);
+  }, [hasConsented, hasCompletedSurvey, hasProvidedContact, phoneNumber, location.state, navigate]);
 
   // Format mm:ss
   const formatTime = (s: number) => {
@@ -170,19 +200,8 @@ const PhoneVerification: React.FC = () => {
       const data = await api.checkOtp(phoneNumber, code, email, undefined);
       
       if (data.verified) {
-        // Checkpoint 2: Check enrollment status before assigning survey link
-        try {
-          const enrollmentStatus = await api.getEnrollmentStatus();
-          if (enrollmentStatus.isFull) {
-            setVerificationError('enrollment_full');
-            showNotification('error', 'Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.');
-            setIsLoading(false);
-            return;
-          }
-        } catch (enrollmentError) {
-          console.error('Failed to check enrollment status:', enrollmentError);
-          // Continue if enrollment check fails (fail open)
-        }
+        // Enrollment check is now handled in the backend before verification
+        // No need to check again here
         
         // Send survey invitation
         try {
@@ -207,8 +226,10 @@ const PhoneVerification: React.FC = () => {
           } else {
             // Check if it's an enrollment full error
             if (invitationData.error === 'enrollment_full' || invitationData.message?.includes('maximum number of participants')) {
-              setVerificationError('enrollment_full');
-              showNotification('error', invitationData.message || 'Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.');
+              // Show user-friendly message instead of raw error
+              const errorMessage = invitationData.message || 'Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.';
+              setVerificationError(errorMessage);
+              showNotification('error', errorMessage);
             } else {
               // Actual error
               setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
@@ -230,11 +251,13 @@ const PhoneVerification: React.FC = () => {
       } else {
         // Check if it's an enrollment full error
         if (data.error === 'enrollment_full' || data.message?.includes('maximum number of participants')) {
-          setVerificationError('enrollment_full');
-          showNotification('error', data.message || 'Thank you for your interest in participating in our research study. Unfortunately, we have reached our maximum number of participants for this study. We appreciate your interest and encourage you to check back in the future. If you have any questions, please contact us at (240) 428-8442.');
+          // Show user-friendly message instead of raw error
+          const errorMessage = data.message || 'Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.';
+          setVerificationError(errorMessage);
+          showNotification('error', errorMessage);
         } else {
-          setVerificationError("That code didn't work. Try again or resend.");
-          showNotification('error', 'Invalid verification code. Please try again.');
+          setVerificationError(data.message || "That code didn't work. Try again or resend.");
+          showNotification('error', data.message || 'Invalid verification code. Please try again.');
         }
         setCodeDigits(Array(6).fill(''));
         const firstBox = document.getElementById('otp-0') as HTMLInputElement;

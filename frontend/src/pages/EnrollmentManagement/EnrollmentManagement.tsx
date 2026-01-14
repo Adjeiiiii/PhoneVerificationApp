@@ -14,6 +14,16 @@ const EnrollmentManagement: React.FC = () => {
     fetchConfig();
   }, []);
 
+  // Auto-dismiss success messages after 5 seconds
+  useEffect(() => {
+    if (message && message.type === 'success') {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
   const fetchConfig = async () => {
     try {
       setLoading(true);

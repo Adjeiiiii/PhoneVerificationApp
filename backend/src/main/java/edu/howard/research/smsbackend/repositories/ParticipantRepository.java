@@ -31,7 +31,15 @@ public interface ParticipantRepository extends JpaRepository<Participant, UUID> 
 
     /**
      * Count participants who have verified their phone number (enrolled participants)
+     * NOTE: This is deprecated - enrollment should count participants with survey invitations, not just verified phones
      */
     @Query("SELECT COUNT(p) FROM Participant p WHERE p.verifiedAt IS NOT NULL")
     long countVerifiedParticipants();
+    
+    /**
+     * Count participants who have received a survey link (enrolled participants)
+     * Enrollment counts only after a survey link has been sent, not just when phone is verified
+     */
+    @Query("SELECT COUNT(DISTINCT si.participant.id) FROM SurveyInvitation si")
+    long countEnrolledParticipants();
 }

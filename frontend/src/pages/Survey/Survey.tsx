@@ -5,7 +5,17 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../../utils/api';
 
 const Survey: React.FC = () => {
-  const { setIsVerified, phoneNumber, setPhoneNumber, email, setEmail } = useVerification();
+  const {
+    setIsVerified,
+    phoneNumber,
+    setPhoneNumber,
+    email,
+    setEmail,
+    hasConsented,
+    setHasConsented,
+    setHasCompletedSurvey,
+    setHasProvidedContact,
+  } = useVerification();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,6 +37,8 @@ const Survey: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<'screening' | 'contact'>('screening');
 
   const [phoneInput, setPhoneInput] = useState('');
+  const [enrollmentFull, setEnrollmentFull] = useState(false);
+  const [checkingEnrollment, setCheckingEnrollment] = useState(true);
 
   // ----------------------
   // Validation helpers
@@ -70,13 +82,58 @@ const Survey: React.FC = () => {
     setCurrentPage('screening');
   };
 
+  // Check enrollment status on page load
+  useEffect(() => {
+    const checkEnrollment = async () => {
+      try {
+        setCheckingEnrollment(true);
+        const status = await api.getEnrollmentStatus();
+        // Enrollment is blocked if it's full OR if enrollment is disabled
+        // Note: JSON uses 'full' and 'enrollmentActive' (not 'isFull' and 'isEnrollmentActive')
+        const isBlocked = status.full || !status.enrollmentActive;
+        setEnrollmentFull(isBlocked);
+        
+        if (isBlocked) {
+          // Redirect to home page after a brief delay to show message
+          setTimeout(() => {
+            navigate('/', { replace: true });
+          }, 2000);
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to check enrollment status:', error);
+        // On error, allow enrollment (fail open)
+        setEnrollmentFull(false);
+      } finally {
+        setCheckingEnrollment(false);
+      }
+    };
+    checkEnrollment();
+  }, [navigate]);
+
+  // Route guard: Check if user has consented (came from landing page)
+  useEffect(() => {
+    // Check if coming from landing page with consent
+    const fromLanding = location.state?.fromLanding === true && location.state?.consented === true;
+    
+    // If user has previously consented (from sessionStorage), allow access
+    if (hasConsented || fromLanding) {
+      if (fromLanding) {
+        setHasConsented(true);
+      }
+      // If coming from phone verification, go directly to contact info page
+      if (location.state?.goToContact) {
+        setCurrentPage('contact');
+      }
+    } else {
+      // No consent - redirect to landing page
+      navigate('/', { replace: true });
+    }
+  }, [location.state, hasConsented, navigate]);
+
   // Add useEffect to clear email when component mounts
   useEffect(() => {
     setEmail('');
-    // If coming from phone verification, go directly to contact info page
-    if (location.state?.goToContact) {
-      setCurrentPage('contact');
-    }
   }, []);
 
   // ----------------------
@@ -152,6 +209,8 @@ const Survey: React.FC = () => {
         setShowSurveyFailModal(true);
         return;
       }
+      // Mark survey as completed
+      setHasCompletedSurvey(true);
       setCurrentPage('contact');
     } else {
       // Validate contact information
@@ -232,12 +291,69 @@ const Survey: React.FC = () => {
   const handleConfirmContactDetails = () => {
     setShowContactDetailsModal(false);
     setIsVerified(false);
-    navigate('/verify');
+    // Mark that contact info has been provided
+    setHasProvidedContact(true);
+    navigate('/verify', { state: { fromSurvey: true } });
   };
 
   // ----------------------
   // Render
   // ----------------------
+  // Show enrollment full message if enrollment is blocked
+  if (checkingEnrollment) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden w-full max-w-2xl">
+          <div className="p-8 md:p-10 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Checking enrollment status...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (enrollmentFull) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden w-full max-w-2xl">
+          <div className="p-8 md:p-10">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">
+                Enrollment Currently Full
+              </h2>
+            </div>
+            <div className="space-y-4 text-center">
+              <p className="text-gray-700 text-lg leading-relaxed">
+                Thank you for your interest in participating in our research study. 
+                Unfortunately, we have reached our maximum number of participants for this study.
+              </p>
+              <p className="text-gray-600 leading-relaxed">
+                We appreciate your interest and encourage you to check back in the future.
+              </p>
+              <div className="pt-4 border-t border-gray-200 mt-6">
+                <p className="text-gray-600 text-sm">
+                  If you have any questions, please contact us at{' '}
+                  <a href="tel:+12404288442" className="text-blue-600 hover:text-blue-800 font-medium">
+                    (240) 428-8442
+                  </a>
+                </p>
+              </div>
+              <p className="text-gray-500 text-sm mt-4">
+                Redirecting to home page...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-2xl">

@@ -2233,12 +2233,17 @@ const GiftCardManagement: React.FC = () => {
 
               {/* Notes */}
               <div className="mt-6">
-                <label className="block text-sm font-semibold text-gray-800 mb-3 flex items-center">
-                  <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Notes
-                  <span className="ml-2 text-xs font-normal text-gray-500">(Optional)</span>
+                <label className="block text-sm font-semibold text-gray-800 mb-3">
+                  <div className="flex items-center mb-1">
+                    <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Notes
+                    <span className="ml-2 text-xs font-normal text-gray-500">(Optional)</span>
+                  </div>
+                  <p className="text-sm text-gray-700 font-semibold ml-6 mt-1">
+                    Notes are not sent to participants. They are saved in the system for internal references only by admins.
+                  </p>
                 </label>
                 <div className="relative">
                   <textarea
@@ -2246,18 +2251,12 @@ const GiftCardManagement: React.FC = () => {
                     onChange={(e) => setSendData({ ...sendData, notes: e.target.value })}
                     className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200 resize-none text-gray-700 placeholder-gray-400 shadow-sm hover:border-gray-300"
                     rows={3}
-                    placeholder="Internal admin notes (e.g., 'Follow up needed', 'Special circumstances', etc.) - not visible to participant"
+                    placeholder="Enter internal notes (e.g., 'Follow up needed', 'Special circumstances', etc.)"
                   />
                   <div className="absolute bottom-3 right-3 text-xs text-gray-400">
                     {sendData.notes.length}/500
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-gray-500 flex items-center">
-                  <svg className="w-3 h-3 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Internal notes for admin reference only (not sent to participant). Use for tracking special circumstances, follow-ups, or other administrative notes.
-                </p>
               </div>
             </div>
 
