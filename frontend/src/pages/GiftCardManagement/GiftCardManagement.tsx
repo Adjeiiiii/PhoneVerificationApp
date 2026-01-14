@@ -1504,7 +1504,10 @@ const GiftCardManagement: React.FC = () => {
                         <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Recipient
+                              Phone
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Email
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Code
@@ -1528,10 +1531,12 @@ const GiftCardManagement: React.FC = () => {
                             <tr key={card.id} className="hover:bg-gray-50 transition">
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-medium text-gray-900">
-                                  {card.participantPhone 
-                                    ? `${card.participantPhone.substring(0, 5)}•••${card.participantPhone.substring(card.participantPhone.length - 4)}`
-                                    : '—'
-                                  }
+                                  {card.participantPhone || '—'}
+                                </div>
+                          </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-700">
+                                  {card.participantEmail || '—'}
                                 </div>
                           </td>
                               <td className="px-6 py-4 whitespace-nowrap">
