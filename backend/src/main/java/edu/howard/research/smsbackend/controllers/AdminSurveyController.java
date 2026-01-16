@@ -466,7 +466,12 @@ public class AdminSurveyController {
 
         // 6) Send email if participant has email address
         if (p.getEmail() != null && !p.getEmail().trim().isEmpty()) {
-            emailService.sendSurveyLink(p.getEmail(), p.getName(), linkToSend);
+            boolean emailSent = emailService.sendSurveyLink(p.getEmail(), p.getName(), linkToSend);
+            if (!emailSent) {
+                log.warn("Failed to send initial survey link email to {} for participant {}", p.getEmail(), phone);
+            } else {
+                log.info("Initial survey link email sent successfully to {} for participant {}", p.getEmail(), phone);
+            }
         }
 
         // 7) Persist queued state if accepted by Twilio
@@ -560,8 +565,12 @@ public class AdminSurveyController {
 
         // Send email if participant has email address - use the same link as SMS (short link if available)
         if (p.getEmail() != null && !p.getEmail().trim().isEmpty()) {
-            emailService.sendSurveyLink(p.getEmail(), p.getName(), linkToSend);
-            log.info("Email {} sent to {} for participant {}: {}", isReminder ? "reminder" : "invitation", p.getEmail(), phone, linkToSend);
+            boolean emailSent = emailService.sendSurveyLink(p.getEmail(), p.getName(), linkToSend);
+            if (emailSent) {
+                log.info("Email {} sent successfully to {} for participant {}: {}", isReminder ? "reminder" : "invitation", p.getEmail(), phone, linkToSend);
+            } else {
+                log.warn("Failed to send email {} to {} for participant {}: {}", isReminder ? "reminder" : "invitation", p.getEmail(), phone, linkToSend);
+            }
         }
 
         // 3) Persist queued state if accepted by Twilio

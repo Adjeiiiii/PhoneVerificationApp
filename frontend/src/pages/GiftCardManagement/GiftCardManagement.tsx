@@ -945,6 +945,103 @@ const GiftCardManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const formatDateForCSV = (dateString: string | null | undefined) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleString();
+  };
+
+  const exportSentGiftCardsToCSV = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all sent gift cards by paginating through all pages
+      const allCards: GiftCard[] = [];
+      let page = 0;
+      const pageSize = 1000; // Use a reasonable page size
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await api.getSentGiftCards(page, pageSize);
+        const cards: GiftCard[] = response.content || [];
+        allCards.push(...cards);
+        
+        // Check if there are more pages
+        hasMore = !response.last && cards.length === pageSize;
+        page++;
+      }
+
+      if (allCards.length === 0) {
+        setMessage({ type: 'error', text: 'No sent gift cards to export' });
+        return;
+      }
+
+      // Define CSV headers
+      const headers = [
+        'Phone',
+        'Email',
+        'Card Code',
+        'Card Type',
+        'Status',
+        'Sent By',
+        'Sent Date',
+        'Expires At',
+        'Notes',
+        'Created At'
+      ];
+
+      // Convert data to CSV rows
+      const csvRows = [
+        headers.join(','),
+        ...allCards.map(card => {
+          const escapeCSV = (value: any) => {
+            if (value === null || value === undefined) return '';
+            const str = String(value);
+            // If the value contains comma, quote, or newline, wrap it in quotes and escape quotes
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          };
+
+          return [
+            escapeCSV(card.participantPhone || ''),
+            escapeCSV(card.participantEmail || ''),
+            escapeCSV(card.cardCode || ''),
+            escapeCSV(card.cardType || ''),
+            escapeCSV(card.status || ''),
+            escapeCSV(card.sentBy || ''),
+            escapeCSV(formatDateForCSV(card.sentAt)),
+            escapeCSV(formatDateForCSV(card.expiresAt)),
+            escapeCSV(card.notes || ''),
+            escapeCSV(formatDateForCSV(card.createdAt))
+          ].join(',');
+        })
+      ];
+
+      // Create CSV content
+      const csvContent = csvRows.join('\n');
+
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `sent-gift-cards-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setMessage({ type: 'success', text: `Exported ${allCards.length} gift card(s) to CSV` });
+    } catch (error: any) {
+      console.error('Error exporting CSV:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to export CSV' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <AdminLayout title="Gift Card Management" searchQuery={searchQuery} onSearchChange={handleSearchChange}>
@@ -1485,6 +1582,18 @@ const GiftCardManagement: React.FC = () => {
                     Gift cards that have been sent to participants
                   </p>
                   </div>
+                  {sentGiftCards.length > 0 && (
+                    <button
+                      onClick={exportSentGiftCardsToCSV}
+                      disabled={loading}
+                      className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>Export CSV</span>
+                    </button>
+                  )}
                 </div>
 
                 {sentGiftCards.length === 0 ? (
