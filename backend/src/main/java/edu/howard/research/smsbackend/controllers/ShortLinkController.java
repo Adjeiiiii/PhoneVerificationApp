@@ -50,8 +50,8 @@ public class ShortLinkController {
 
         log.info("Redirecting short code {} to: {}", shortCode, originalUrl);
 
-        // Return HTTP 302 redirect
-        return ResponseEntity.status(HttpStatus.FOUND)
+        // Return HTTP 301 (permanent redirect) for better browser compatibility
+        return ResponseEntity.status(HttpStatus.MOVED_PERMANENTLY)
                 .location(URI.create(originalUrl))
                 .build();
     }
