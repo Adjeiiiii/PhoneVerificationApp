@@ -218,8 +218,8 @@ const AdminDashboard: React.FC = () => {
         setStats({ totalVerifications: 0, usedLinks: 0, availableLinks: 0 });
       });
 
-    // 2) invitations (instead of verifications)
-    api.get('/api/admin/invitations')
+    // 2) invitations (instead of verifications) - fetch with larger page size
+    api.get('/api/admin/invitations?page=0&size=1000')
       .then((data: any) => {
         console.log('Invitations data:', data);
         if (data && data.content) {
