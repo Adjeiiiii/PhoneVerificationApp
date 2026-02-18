@@ -51,6 +51,9 @@ public class Participant {
     @Column(name = "verified_at")
     private OffsetDateTime verifiedAt;
 
+    @Column(name = "signup_ip", length = 45)
+    private String signupIp;
+
     // Getters & setters
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -78,4 +81,7 @@ public class Participant {
 
     public OffsetDateTime getVerifiedAt() { return verifiedAt; }
     public void setVerifiedAt(OffsetDateTime verifiedAt) { this.verifiedAt = verifiedAt; }
+
+    public String getSignupIp() { return signupIp; }
+    public void setSignupIp(String signupIp) { this.signupIp = signupIp; }
 }

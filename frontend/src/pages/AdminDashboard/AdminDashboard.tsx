@@ -22,6 +22,7 @@ interface VerificationRecord {
   email_status: string; // Email status (placeholder for future)
   email_sent_at: string | null; // Email timestamp (placeholder for future)
   completed_at: string | null; // Survey completion timestamp
+  signup_ip: string | null; // Client IP at signup (OTP check)
 }
 
 // LinkRecord interface removed - no longer used
@@ -246,7 +247,8 @@ const AdminDashboard: React.FC = () => {
             // Email fields - show actual data
             email_status: invitation.participant?.email || 'N/A', // Show actual email address
             email_sent_at: invitation.sentAt || invitation.queuedAt || 'N/A',  // Show actual timestamp
-            completed_at: invitation.completedAt || null // Survey completion timestamp
+            completed_at: invitation.completedAt || null, // Survey completion timestamp
+            signup_ip: invitation.participant?.signupIp || null
           }));
           console.log('Converted records:', convertedRecords);
           setRecords(convertedRecords);
@@ -308,7 +310,8 @@ const AdminDashboard: React.FC = () => {
       (r.email && r.email.toLowerCase().includes(q)) ||
       (r.assigned_link && r.assigned_link.toLowerCase().includes(q)) ||
       (r.short_link && r.short_link.toLowerCase().includes(q)) ||
-      (r.status && r.status.toLowerCase().includes(q));
+      (r.status && r.status.toLowerCase().includes(q)) ||
+      (r.signup_ip && r.signup_ip.toLowerCase().includes(q));
 
     return matchesSearch;
   });
@@ -867,6 +870,7 @@ const AdminDashboard: React.FC = () => {
                     <th className="p-2 w-32">SMS Status</th>
                     <th className="p-2 w-32">Survey Status</th>
                     <th className="p-2 w-36">Email Address</th>
+                    <th className="p-2 w-28">Signup IP</th>
                     <th className="p-2 w-48">Assigned Link</th>
                     <th className="p-2 w-36">SMS Sent At</th>
                     <th className="p-2 w-36">Email Sent At</th>
@@ -915,6 +919,13 @@ const AdminDashboard: React.FC = () => {
                               <span className="text-blue-600 font-medium">{r.email_status}</span>
                             ) : (
                               <span className="text-gray-500">No email</span>
+                            )}
+                          </td>
+                          <td className="p-2 break-words font-mono text-sm">
+                            {r.signup_ip ? (
+                              <span className="text-gray-700" title={r.signup_ip}>{r.signup_ip}</span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
                             )}
                           </td>
                           <td className="p-2 break-words">

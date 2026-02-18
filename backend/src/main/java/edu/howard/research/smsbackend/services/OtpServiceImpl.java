@@ -83,7 +83,7 @@ public class OtpServiceImpl implements OtpService {
 
     @Override
     @Transactional(noRollbackFor = {ApiException.class})
-    public Map<String, Object> check(OtpCheckRequest req) {
+    public Map<String, Object> check(OtpCheckRequest req, String clientIp) {
         VerificationCheck check;
         try {
             check = VerificationCheck.creator(verifyServiceSid)
@@ -115,6 +115,9 @@ public class OtpServiceImpl implements OtpService {
                 newParticipant.setStatus(ParticipantStatus.SUBSCRIBED);
                 newParticipant.setPhoneVerified(true);
                 newParticipant.setVerifiedAt(OffsetDateTime.now());
+                if (clientIp != null && !clientIp.isBlank()) {
+                    newParticipant.setSignupIp(clientIp.trim());
+                }
                 return participantRepo.save(newParticipant);
             });
             
@@ -135,7 +138,12 @@ public class OtpServiceImpl implements OtpService {
                 participant.setVerifiedAt(OffsetDateTime.now());
                 updated = true;
             }
-            
+            // Log signup IP for every person (set if missing)
+            if (clientIp != null && !clientIp.isBlank() && (participant.getSignupIp() == null || participant.getSignupIp().isBlank())) {
+                participant.setSignupIp(clientIp.trim());
+                updated = true;
+            }
+
             if (updated) {
                 participantRepo.save(participant);
                 log.info("Updated participant {} with email: {}, name: {}", 

@@ -10,5 +10,8 @@ import java.util.Map;
  */
 public interface OtpService {
     Map<String, Object> start(OtpStartRequest req);
-    Map<String, Object> check(OtpCheckRequest req);
+    /**
+     * Verify OTP and create/update participant. If clientIp is non-null, it is stored as signup_ip.
+     */
+    Map<String, Object> check(OtpCheckRequest req, String clientIp);
 }
