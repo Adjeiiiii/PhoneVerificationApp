@@ -13,3 +13,6 @@ public interface SurveyEnrollmentConfigRepository extends JpaRepository<SurveyEn
     Optional<SurveyEnrollmentConfig> findFirstByOrderByCreatedAtAsc();
 }
 
+
+
+

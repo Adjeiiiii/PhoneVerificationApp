@@ -235,11 +235,11 @@ public class ParticipantsController {
                     // Note: linkUrl is intentionally omitted - frontend checks for its presence
                 } else {
                     // Actual error
-                    return ResponseEntity.ok(Map.of(
-                        "ok", false,
+                return ResponseEntity.ok(Map.of(
+                    "ok", false,
                         "error", result.reason() != null ? result.reason() : "unknown_error",
                         "message", "Failed to send survey link: " + (result.reason() != null ? result.reason() : "Unknown error")
-                    ));
+                ));
                 }
             }
         } catch (IllegalArgumentException e) {

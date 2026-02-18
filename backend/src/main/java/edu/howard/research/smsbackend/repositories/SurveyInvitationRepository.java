@@ -21,6 +21,10 @@ public interface SurveyInvitationRepository extends JpaRepository<SurveyInvitati
     // ---- Lookups used by service ----
     Optional<SurveyInvitation> findTopByLinkUrlOrderByCreatedAtDesc(String linkUrl);
     Optional<SurveyInvitation> findByLinkId(UUID linkId);
+    
+    // Find invitations by list of URLs (for bulk operations)
+    @Query("SELECT i FROM SurveyInvitation i WHERE i.linkUrl IN :urls")
+    List<SurveyInvitation> findByLinkUrlIn(@Param("urls") List<String> urls);
 
     // Idempotency helpers: find existing "active" invitation (reuse same link)
     @Query("""

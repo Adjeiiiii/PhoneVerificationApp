@@ -45,7 +45,7 @@ const AdminDashboard: React.FC = () => {
   // Enrollment widget removed from dashboard; keeping enrollment config on the dashboard is unnecessary
   // (Enrollment is managed via the sidebar "Enrollment Settings" page.)
   // const [enrollmentConfig, setEnrollmentConfig] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'invitations' | 'waiting'>('invitations');
+  const [activeTab, setActiveTab] = useState<'invitations' | 'waiting' | 'bulk-complete'>('invitations');
   const [showLinkSelectionModal, setShowLinkSelectionModal] = useState(false);
   const [selectedParticipantForLink, setSelectedParticipantForLink] = useState<any>(null);
   const [selectedLinkId, setSelectedLinkId] = useState<string>('');
@@ -82,6 +82,16 @@ const AdminDashboard: React.FC = () => {
   // For success/failure messages
   const [bulkActionMessage, setBulkActionMessage] = useState<string>('');
 
+  // Bulk complete by links
+  const [uploadedLinks, setUploadedLinks] = useState<string[]>([]);
+  const [linkPreviews, setLinkPreviews] = useState<any[]>([]);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [bulkCompleteResult, setBulkCompleteResult] = useState<any>(null);
+  const [bulkCompleteError, setBulkCompleteError] = useState<string | null>(null);
+  const [isProcessingBulkComplete, setIsProcessingBulkComplete] = useState(false);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewPageSize] = useState(10);
+
   // Helper function to determine if a message is a success message
   const isSuccessMessage = (message: string): boolean => {
     const lowerMessage = message.toLowerCase();
@@ -90,6 +100,7 @@ const AdminDashboard: React.FC = () => {
            lowerMessage.includes('copied') ||
            lowerMessage.includes('reminder sent') ||
            lowerMessage.includes('reminders sent') ||
+           (lowerMessage.includes('created') && !lowerMessage.includes('error') && !lowerMessage.includes('failed')) ||
            (lowerMessage.includes('completed') && !lowerMessage.includes('error')) ||
            (lowerMessage.includes('deleted') && !lowerMessage.includes('error')) ||
            (lowerMessage.includes('updated') && !lowerMessage.includes('error'));
@@ -743,6 +754,16 @@ const AdminDashboard: React.FC = () => {
                     </span>
                   )}
                 </button>
+                <button
+                  onClick={() => setActiveTab('bulk-complete')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'bulk-complete'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Bulk Complete
+                </button>
               </nav>
             </div>
           </div>
@@ -1283,6 +1304,391 @@ const AdminDashboard: React.FC = () => {
               </div>
             )}
           </div>
+          )}
+
+          {/* Bulk Complete Tab */}
+          {activeTab === 'bulk-complete' && (
+            <div className="bg-white rounded-lg shadow flex-1 flex flex-col min-h-0 overflow-y-auto">
+              <div className="p-6">
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-800 mb-2">
+                        Bulk Mark Surveys as Completed
+                      </h2>
+                      <p className="text-sm text-gray-600">
+                        Upload a file containing survey links (one per line) to mark them as completed.
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('This will create 15 test participants with survey invitations. Continue?')) {
+                          try {
+                            const result = await api.seedTestData();
+                            setBulkActionMessage(`Successfully created test data: ${result.participantsCreated} participants, ${result.invitationsCreated} invitations`);
+                            fetchStatsAndRecords(); // Refresh dashboard
+                            setTimeout(() => setBulkActionMessage(''), 5000);
+                          } catch (error: any) {
+                            setBulkActionMessage(`Error: ${error?.message || 'Failed to seed test data'}`);
+                          }
+                        }
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                    >
+                      Seed Test Data (15 entries)
+                    </button>
+                  </div>
+                </div>
+
+                {/* File Upload Section - Only show when no links uploaded */}
+                {uploadedLinks.length === 0 && !bulkCompleteResult && (
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 mb-6">
+                    <input
+                      type="file"
+                      id="linkFile"
+                      accept=".txt,.csv"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = async (event) => {
+                            const text = event.target?.result as string;
+                            const lines = text.split('\n')
+                              .map(line => line.trim())
+                              .filter(line => line.length > 0);
+                            setUploadedLinks(lines);
+                            setPreviewPage(1);
+                            setBulkCompleteResult(null);
+                            setBulkCompleteError(null);
+                            
+                            // Load preview data
+                            setIsLoadingPreview(true);
+                            try {
+                              const previews = await api.previewLinks(lines);
+                              setLinkPreviews(previews);
+                            } catch (error: any) {
+                              console.error('Failed to load preview:', error);
+                              setBulkCompleteError('Failed to load preview data');
+                            } finally {
+                              setIsLoadingPreview(false);
+                            }
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="linkFile"
+                      className="flex flex-col items-center justify-center cursor-pointer"
+                    >
+                      <svg className="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <span className="text-sm font-medium text-gray-700 mb-1">
+                        Click to upload file
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        Supports .txt or .csv files (one link per line)
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                {/* Preview Section */}
+                {uploadedLinks.length > 0 && !bulkCompleteResult && (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        Preview ({uploadedLinks.length})
+                      </h3>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => {
+                            setUploadedLinks([]);
+                            setLinkPreviews([]);
+                            setBulkCompleteResult(null);
+                            setBulkCompleteError(null);
+                            setPreviewPage(1);
+                          }}
+                          className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                        >
+                          Clear & Upload New
+                        </button>
+                        <button
+                          onClick={async () => {
+                            setIsProcessingBulkComplete(true);
+                            setBulkCompleteError(null);
+                            try {
+                              const result = await api.bulkCompleteByLinks(uploadedLinks);
+                              setBulkCompleteResult(result);
+                              fetchStatsAndRecords(); // Refresh the dashboard
+                            } catch (error: any) {
+                              setBulkCompleteError(error?.message || 'Failed to process links');
+                            } finally {
+                              setIsProcessingBulkComplete(false);
+                            }
+                          }}
+                          disabled={isProcessingBulkComplete}
+                          className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm hover:shadow-md flex items-center gap-2"
+                        >
+                          {isProcessingBulkComplete ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Process Links
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {isLoadingPreview ? (
+                      <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+                        <svg className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="text-gray-600">Loading preview data...</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white border border-gray-200 rounded-lg mb-4 shadow-sm">
+                        <div className="max-h-96 overflow-y-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 border-b-2 border-gray-200">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">#</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Link</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Participant</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Info</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {linkPreviews
+                                .slice((previewPage - 1) * previewPageSize, previewPage * previewPageSize)
+                                .map((preview: any, index: number) => {
+                                  const globalIndex = (previewPage - 1) * previewPageSize + index;
+                                  const getStatusBadge = () => {
+                                    switch (preview.status) {
+                                      case 'found':
+                                        return (
+                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            Ready
+                                          </span>
+                                        );
+                                      case 'already_completed':
+                                        return (
+                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            Completed
+                                          </span>
+                                        );
+                                      case 'not_found':
+                                        return (
+                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                            </svg>
+                                            Not Found
+                                          </span>
+                                        );
+                                      case 'duplicate':
+                                        return (
+                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                            Duplicate
+                                          </span>
+                                        );
+                                      default:
+                                        return <span className="text-gray-500">Unknown</span>;
+                                    }
+                                  };
+                                  
+                                  return (
+                                    <tr key={globalIndex} className="hover:bg-gray-50 transition-colors">
+                                      <td className="px-4 py-3 text-gray-600 font-semibold">{globalIndex + 1}</td>
+                                      <td className="px-4 py-3">{getStatusBadge()}</td>
+                                      <td className="px-4 py-3">
+                                        <div className="font-mono text-xs text-gray-800 break-all max-w-md">
+                                          {preview.link}
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        {preview.participantPhone ? (
+                                          <div className="space-y-1">
+                                            {preview.participantName && (
+                                              <div className="font-medium text-gray-900">{preview.participantName}</div>
+                                            )}
+                                            <div className="text-xs text-gray-600">{preview.participantPhone}</div>
+                                            {preview.participantEmail && (
+                                              <div className="text-xs text-gray-500">{preview.participantEmail}</div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-gray-400 italic">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <div className="text-xs text-gray-600">{preview.message || '—'}</div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Pagination */}
+                    {!isLoadingPreview && linkPreviews.length > previewPageSize && (
+                      <div className="border-t border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between rounded-b-lg">
+                        <div className="text-sm text-gray-700">
+                          Showing {(previewPage - 1) * previewPageSize + 1} to {Math.min(previewPage * previewPageSize, linkPreviews.length)} of {linkPreviews.length} links
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setPreviewPage(p => Math.max(1, p - 1))}
+                            disabled={previewPage === 1}
+                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Previous
+                          </button>
+                          <span className="px-3 py-1.5 text-sm text-gray-700">
+                            Page {previewPage} of {Math.ceil(linkPreviews.length / previewPageSize)}
+                          </span>
+                          <button
+                            onClick={() => setPreviewPage(p => Math.min(Math.ceil(linkPreviews.length / previewPageSize), p + 1))}
+                            disabled={previewPage >= Math.ceil(linkPreviews.length / previewPageSize)}
+                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Results Section */}
+                {bulkCompleteResult && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Results</h3>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Total in File</p>
+                          <p className="text-lg font-bold text-gray-800">{bulkCompleteResult.totalLinksInFile}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Unique Links</p>
+                          <p className="text-lg font-bold text-gray-700">
+                            {bulkCompleteResult.newlyCompleted + bulkCompleteResult.alreadyCompleted + bulkCompleteResult.notFound}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-green-600 mb-1">Newly Completed</p>
+                          <p className="text-lg font-bold text-green-700">{bulkCompleteResult.newlyCompleted}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-blue-600 mb-1">Already Completed</p>
+                          <p className="text-lg font-bold text-blue-700">{bulkCompleteResult.alreadyCompleted}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-red-600 mb-1">Not Found</p>
+                          <p className="text-lg font-bold text-red-700">{bulkCompleteResult.notFound}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-yellow-600 mb-1">Duplicates</p>
+                          <p className="text-lg font-bold text-yellow-700">{bulkCompleteResult.duplicatesInFile}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-green-300">
+                        <p className="text-xs text-gray-600">
+                          <span className="font-semibold">Verification:</span> {bulkCompleteResult.newlyCompleted + bulkCompleteResult.alreadyCompleted + bulkCompleteResult.notFound} unique links processed
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Detailed Lists */}
+                    {(bulkCompleteResult.notFoundLinks.length > 0 || bulkCompleteResult.duplicateLinks.length > 0) && (
+                      <div className="space-y-4">
+                        {bulkCompleteResult.notFoundLinks.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-red-700 mb-2">
+                              Links Not Found ({bulkCompleteResult.notFoundLinks.length})
+                            </h4>
+                            <div className="max-h-40 overflow-y-auto border border-red-200 rounded-lg bg-red-50">
+                              <ul className="p-3 space-y-1">
+                                {bulkCompleteResult.notFoundLinks.map((link: string, index: number) => (
+                                  <li key={index} className="text-xs font-mono text-red-800 break-all">
+                                    {link}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+
+                        {bulkCompleteResult.duplicateLinks.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-yellow-700 mb-2">
+                              Duplicate Links in File ({bulkCompleteResult.duplicateLinks.length})
+                            </h4>
+                            <div className="max-h-40 overflow-y-auto border border-yellow-200 rounded-lg bg-yellow-50">
+                              <ul className="p-3 space-y-1">
+                                {bulkCompleteResult.duplicateLinks.map((link: string, index: number) => (
+                                  <li key={index} className="text-xs font-mono text-yellow-800 break-all">
+                                    {link}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-4">
+                      <button
+                        onClick={() => {
+                          setUploadedLinks([]);
+                          setBulkCompleteResult(null);
+                          setBulkCompleteError(null);
+                        }}
+                        className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                      >
+                        Upload Another File
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Message */}
+                {bulkCompleteError && (
+                  <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-sm text-red-800">{bulkCompleteError}</p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
       </div>
 

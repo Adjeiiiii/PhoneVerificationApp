@@ -1,5 +1,7 @@
 package edu.howard.research.smsbackend.services;
 
+import edu.howard.research.smsbackend.models.dto.BulkCompleteByLinksResponse;
+import edu.howard.research.smsbackend.models.dto.LinkPreviewDto;
 import edu.howard.research.smsbackend.models.entities.Participant;
 import edu.howard.research.smsbackend.models.entities.SurveyInvitation;
 import edu.howard.research.smsbackend.models.entities.SurveyLinkPool;
@@ -7,16 +9,18 @@ import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class InvitationsService {
 
     private final SurveyInvitationRepository inviteRepo;
@@ -162,5 +166,173 @@ public class InvitationsService {
     @Transactional
     public void markQueued(java.util.UUID invitationId, String sid) {
         inviteRepo.setQueued(invitationId, sid, "queued", java.time.OffsetDateTime.now());
+    }
+
+    /**
+     * Bulk mark invitations as completed by their full link URLs.
+     * Returns detailed breakdown: newly completed, already completed, not found, duplicates.
+     */
+    @Transactional
+    public BulkCompleteByLinksResponse bulkCompleteByLinks(List<String> links) {
+        if (links == null || links.isEmpty()) {
+            return new BulkCompleteByLinksResponse(0, 0, 0, 0, 0, Collections.emptyList(), Collections.emptyList());
+        }
+
+        // Normalize URLs (trim whitespace)
+        List<String> normalizedLinks = links.stream()
+                .map(String::trim)
+                .filter(url -> !url.isBlank())
+                .collect(Collectors.toList());
+
+        int totalLinksInFile = normalizedLinks.size();
+
+        // Find duplicates in the input file
+        Map<String, Long> urlCounts = normalizedLinks.stream()
+                .collect(Collectors.groupingBy(url -> url, Collectors.counting()));
+        
+        List<String> duplicateLinks = urlCounts.entrySet().stream()
+                .filter(entry -> entry.getValue() > 1)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        
+        int duplicatesInFile = duplicateLinks.size();
+
+        // Get unique URLs (deduplicate for processing)
+        Set<String> uniqueUrls = new HashSet<>(normalizedLinks);
+        List<String> uniqueUrlList = new ArrayList<>(uniqueUrls);
+
+        // Find all invitations matching these URLs
+        List<SurveyInvitation> foundInvitations = inviteRepo.findByLinkUrlIn(uniqueUrlList);
+        Map<String, SurveyInvitation> urlToInvitation = foundInvitations.stream()
+                .collect(Collectors.toMap(
+                        SurveyInvitation::getLinkUrl,
+                        inv -> inv,
+                        (existing, replacement) -> existing // If duplicate URLs in DB, keep first
+                ));
+
+        // Categorize invitations
+        List<String> notFoundLinks = new ArrayList<>();
+        List<String> alreadyCompletedLinks = new ArrayList<>();
+        List<SurveyInvitation> toComplete = new ArrayList<>();
+
+        for (String url : uniqueUrlList) {
+            SurveyInvitation inv = urlToInvitation.get(url);
+            if (inv == null) {
+                notFoundLinks.add(url);
+            } else if (inv.getCompletedAt() != null) {
+                alreadyCompletedLinks.add(url);
+            } else {
+                toComplete.add(inv);
+            }
+        }
+        
+        // Verify all unique links are categorized
+        int categorizedCount = notFoundLinks.size() + alreadyCompletedLinks.size() + toComplete.size();
+        if (categorizedCount != uniqueUrlList.size()) {
+            log.warn("Mismatch in categorization: {} unique URLs but {} categorized", uniqueUrlList.size(), categorizedCount);
+        }
+
+        // Mark invitations as completed
+        OffsetDateTime now = OffsetDateTime.now();
+        int newlyCompleted = 0;
+
+        for (SurveyInvitation inv : toComplete) {
+            try {
+                inviteRepo.markCompletedById(inv.getId(), now);
+                newlyCompleted++;
+
+                // Mark associated link as exhausted (same as webhook does)
+                if (inv.getLink() != null && inv.getLink().getId() != null) {
+                    try {
+                        linkRepo.markExhausted(inv.getLink().getId());
+                    } catch (Exception ex) {
+                        // Log but don't fail the operation
+                        System.err.println("Failed to mark link exhausted for invitation " + inv.getId() + ": " + ex.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to complete invitation " + inv.getId() + ": " + e.getMessage());
+            }
+        }
+
+        return new BulkCompleteByLinksResponse(
+                totalLinksInFile,
+                newlyCompleted,
+                alreadyCompletedLinks.size(),
+                notFoundLinks.size(),
+                duplicatesInFile,
+                notFoundLinks,
+                duplicateLinks
+        );
+    }
+
+    /**
+     * Preview links without processing them. Returns detailed information about each link.
+     */
+    @Transactional(readOnly = true)
+    public List<LinkPreviewDto> previewLinks(List<String> links) {
+        if (links == null || links.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Normalize URLs
+        List<String> normalizedLinks = links.stream()
+                .map(String::trim)
+                .filter(url -> !url.isBlank())
+                .collect(Collectors.toList());
+
+        // Find duplicates in the input
+        Map<String, Long> urlCounts = normalizedLinks.stream()
+                .collect(Collectors.groupingBy(url -> url, Collectors.counting()));
+
+        // Find all invitations matching these URLs
+        Set<String> uniqueUrls = new HashSet<>(normalizedLinks);
+        List<SurveyInvitation> foundInvitations = inviteRepo.findByLinkUrlIn(new ArrayList<>(uniqueUrls));
+        Map<String, SurveyInvitation> urlToInvitation = foundInvitations.stream()
+                .collect(Collectors.toMap(
+                        SurveyInvitation::getLinkUrl,
+                        inv -> inv,
+                        (existing, replacement) -> existing
+                ));
+
+        // Build preview for each link
+        List<LinkPreviewDto> previews = new ArrayList<>();
+        for (int i = 0; i < normalizedLinks.size(); i++) {
+            String url = normalizedLinks.get(i);
+            LinkPreviewDto preview = new LinkPreviewDto();
+            preview.setLink(url);
+
+            // Check if duplicate in file
+            if (urlCounts.get(url) > 1) {
+                preview.setStatus("duplicate");
+                preview.setMessage("This link appears " + urlCounts.get(url) + " times in the file");
+            } else {
+                SurveyInvitation inv = urlToInvitation.get(url);
+                if (inv == null) {
+                    preview.setStatus("not_found");
+                    preview.setMessage("Link not found in system");
+                } else {
+                    preview.setStatus("found");
+                    if (inv.getCompletedAt() != null) {
+                        preview.setStatus("already_completed");
+                        preview.setMessage("Already marked as completed");
+                        preview.setIsCompleted(true);
+                    } else {
+                        preview.setMessage("Ready to mark as completed");
+                        preview.setIsCompleted(false);
+                    }
+                    
+                    // Get participant info
+                    if (inv.getParticipant() != null) {
+                        preview.setParticipantPhone(inv.getParticipant().getPhone());
+                        preview.setParticipantName(inv.getParticipant().getName());
+                        preview.setParticipantEmail(inv.getParticipant().getEmail());
+                    }
+                }
+            }
+            previews.add(preview);
+        }
+
+        return previews;
     }
 }

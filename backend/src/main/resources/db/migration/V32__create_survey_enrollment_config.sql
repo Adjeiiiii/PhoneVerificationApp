@@ -15,3 +15,6 @@ VALUES (NULL, true, 'SYSTEM');
 -- Add comment
 COMMENT ON TABLE survey_enrollment_config IS 'Configuration for survey enrollment limits. Only one row should exist. NULL max_participants means unlimited.';
 
+
+
+
