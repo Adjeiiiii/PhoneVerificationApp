@@ -121,8 +121,12 @@ const GiftCardManagement: React.FC = () => {
   // Next available card to be sent
   const [nextAvailableCard, setNextAvailableCard] = useState<GiftCardPool | null>(null);
   
-  // Sent gift cards
+  // Sent gift cards (paginated)
   const [sentGiftCards, setSentGiftCards] = useState<GiftCard[]>([]);
+  const [sentPage, setSentPage] = useState<number>(0);
+  const [sentPageSize, setSentPageSize] = useState<number>(20);
+  const [sentTotalPages, setSentTotalPages] = useState<number>(0);
+  const [sentTotalElements, setSentTotalElements] = useState<number>(0);
   
   // Unsent gift cards
   const [unsentGiftCards, setUnsentGiftCards] = useState<UnsentGiftCard[]>([]);
@@ -253,11 +257,10 @@ const GiftCardManagement: React.FC = () => {
       fetchPoolData();
     } else if (activeTab === 'eligible') {
       fetchEligibleParticipants();
-    } else if (activeTab === 'sent') {
-      fetchSentGiftCards();
     } else if (activeTab === 'unsent') {
       fetchUnsentGiftCards();
     }
+    // Sent tab is handled by the effect below (so pagination refetches work)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, poolStatusFilter]);
 
@@ -268,6 +271,14 @@ const GiftCardManagement: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolStatusFilter, poolPage, poolPageSize, poolSearch]);
+
+  // Refetch sent gift cards when on sent tab and page/size change
+  useEffect(() => {
+    if (activeTab === 'sent') {
+      fetchSentGiftCards();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, sentPage, sentPageSize]);
 
   const fetchData = async () => {
     await Promise.all([
@@ -313,10 +324,16 @@ const GiftCardManagement: React.FC = () => {
     }
   };
 
-  const fetchSentGiftCards = async () => {
+  const fetchSentGiftCards = async (pageOverride?: number, sizeOverride?: number) => {
     try {
-      const response = await api.getSentGiftCards(0, 20);
+      const page = pageOverride ?? sentPage;
+      const size = sizeOverride ?? sentPageSize;
+      const response = await api.getSentGiftCards(page, size);
       setSentGiftCards(response.content || []);
+      setSentTotalPages(response.totalPages ?? 0);
+      setSentTotalElements(response.totalElements ?? 0);
+      if (pageOverride !== undefined) setSentPage(pageOverride);
+      if (sizeOverride !== undefined) setSentPageSize(sizeOverride);
     } catch (error) {
       console.error('Error fetching sent gift cards:', error);
     }
@@ -698,8 +715,8 @@ const GiftCardManagement: React.FC = () => {
       setSelectedParticipantIds([]);
       await fetchPoolStatus();
       await fetchEligibleParticipants();
-      await fetchSentGiftCards();
       await fetchPoolData();
+      if (activeTab === 'sent') await fetchSentGiftCards(0);
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to send gift cards' });
     } finally {
@@ -1105,7 +1122,7 @@ const GiftCardManagement: React.FC = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Sent Gift Cards ({sentGiftCards.length})
+                Sent Gift Cards ({sentTotalElements})
               </button>
               <button
                 onClick={() => setActiveTab('unsent')}
@@ -1582,7 +1599,7 @@ const GiftCardManagement: React.FC = () => {
                     Gift cards that have been sent to participants
                   </p>
                   </div>
-                  {sentGiftCards.length > 0 && (
+                  {sentTotalElements > 0 && (
                     <button
                       onClick={exportSentGiftCardsToCSV}
                       disabled={loading}
@@ -1638,7 +1655,7 @@ const GiftCardManagement: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {sentGiftCards.map((card) => (
+                      {sentGiftCards.map((card: GiftCard) => (
                             <tr key={card.id} className="hover:bg-gray-50 transition">
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-medium text-gray-900">
@@ -1794,6 +1811,45 @@ const GiftCardManagement: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                    <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200 flex-shrink-0">
+                      <div className="text-sm text-gray-600">
+                        Showing {sentTotalElements === 0 ? 0 : sentPage * sentPageSize + 1}–{Math.min((sentPage + 1) * sentPageSize, sentTotalElements)} of {sentTotalElements}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setSentPage(Math.max(sentPage - 1, 0))}
+                          disabled={sentPage === 0}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-600">
+                          Page {sentPage + 1} of {sentTotalPages || 1}
+                        </span>
+                        <button
+                          onClick={() => setSentPage(sentPage + 1)}
+                          disabled={sentTotalPages ? sentPage + 1 >= sentTotalPages : false}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                        <div className="relative">
+                          <select
+                            value={sentPageSize}
+                            onChange={(e) => { setSentPageSize(parseInt(e.target.value, 10)); setSentPage(0); }}
+                            className="h-9 pl-3 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                          >
+                            <option value={10}>10 per page</option>
+                            <option value={20}>20 per page</option>
+                            <option value={50}>50 per page</option>
+                            <option value={100}>100 per page</option>
+                          </select>
+                          <svg className="pointer-events-none w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
