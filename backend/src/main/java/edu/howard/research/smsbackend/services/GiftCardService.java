@@ -22,6 +22,11 @@ public interface GiftCardService {
     List<EligibleParticipantDto> getEligibleParticipants();
 
     /**
+     * Get gift cards that failed to send (status FAILED) with participant and failure info.
+     */
+    List<FailedGiftCardDto> getFailedGiftCards();
+
+    /**
      * Send gift card to participant (admin action)
      */
     GiftCardDto sendGiftCard(UUID participantId, SendGiftCardRequest request, String adminUsername);

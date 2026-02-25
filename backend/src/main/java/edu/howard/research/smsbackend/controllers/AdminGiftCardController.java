@@ -43,6 +43,15 @@ public class AdminGiftCardController {
     }
 
     /**
+     * Get gift cards that failed to send (status FAILED) with participant and failure info.
+     */
+    @GetMapping("/failed")
+    public ResponseEntity<List<FailedGiftCardDto>> getFailedGiftCards() {
+        List<FailedGiftCardDto> failed = giftCardService.getFailedGiftCards();
+        return ResponseEntity.ok(failed);
+    }
+
+    /**
      * Get all gift cards
      */
     @GetMapping

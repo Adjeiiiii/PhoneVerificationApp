@@ -465,8 +465,8 @@ const AdminDBOps: React.FC = () => {
         selectedLinkIds.map(async (id) => {
           try {
             const res = await fetch(`/api/admin/delete-link/${id}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` }
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
             });
 
             const data = await res.json().catch(() => ({}));
@@ -491,8 +491,8 @@ const AdminDBOps: React.FC = () => {
         setLinks(prev => prev.filter(l => !successfulIds.includes(l.id)));
       }
 
-      setSelectedLinkIds([]);
-      setShowBulkDeleteModal(false);
+        setSelectedLinkIds([]);
+        setShowBulkDeleteModal(false);
 
       // Always refresh from server after bulk delete to stay in sync
       await fetchLinks(token);
@@ -507,7 +507,7 @@ const AdminDBOps: React.FC = () => {
         setActionMessage(`Deleted ${successfulIds.length}, failed ${failed.length}. ${sampleError}${suffix}`);
       }
     } catch (err) {
-      console.error('Bulk delete error:', err);
+        console.error('Bulk delete error:', err);
       setActionMessage('Failed to delete links. Please try again.');
     }
   };
@@ -537,7 +537,7 @@ const AdminDBOps: React.FC = () => {
             <div className="text-center">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
               <p className="text-gray-600">Loading links...</p>
-            </div>
+      </div>
           </div>
         </div>
       </AdminLayout>
@@ -569,77 +569,77 @@ const AdminDBOps: React.FC = () => {
 
         <div className="bg-white rounded-lg shadow overflow-hidden flex-1 flex flex-col min-h-0">
           <div className="p-4 flex-shrink-0">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-              <div>
-                <h2 className="text-lg font-semibold">Links Management</h2>
-                <p className="text-sm text-gray-700">
-                  Below is a list of all links in the database.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold">Links Management</h2>
+              <p className="text-sm text-gray-700">
+                Below is a list of all links in the database.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
                   className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all flex items-center"
-                  onClick={() => setShowCsvUploadModal(true)}
-                >
+                onClick={() => setShowCsvUploadModal(true)}
+              >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  Upload Links
-                </button>
-                <button
+                Upload Links
+              </button>
+              <button
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm
-                    ${selectedLinkIds.length === 0 
+                  ${selectedLinkIds.length === 0 
                       ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200' 
                       : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md'}`}
-                  disabled={selectedLinkIds.length === 0}
-                  onClick={() => setShowBulkDeleteModal(true)}
-                >
+                disabled={selectedLinkIds.length === 0}
+                onClick={() => setShowBulkDeleteModal(true)}
+              >
                   <svg className={`w-4 h-4 mr-2 ${selectedLinkIds.length === 0 ? 'text-gray-400' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  Delete Selected ({selectedLinkIds.length})
-                </button>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Show:</span>
+                Delete Selected ({selectedLinkIds.length})
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Show:</span>
                   <div className="relative">
-                    <select
-                      value={recordsPerPage}
-                      onChange={handleRecordsPerPageChange}
+                <select
+                  value={recordsPerPage}
+                  onChange={handleRecordsPerPageChange}
                       className="h-9 pl-3 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
-                    >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
                     <svg className="pointer-events-none w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
-                  <span className="text-sm text-gray-600">entries</span>
-                </div>
+                <span className="text-sm text-gray-600">entries</span>
               </div>
             </div>
+          </div>
 
-            {/* Filter row */}
+          {/* Filter row */}
             <div className="flex items-center gap-2">
-              <label htmlFor="filterSelect" className="font-medium text-sm">
-                Filter by:
-              </label>
+            <label htmlFor="filterSelect" className="font-medium text-sm">
+              Filter by:
+            </label>
               <div className="relative">
-                <select
-                  id="filterSelect"
-                  value={filter}
+            <select
+              id="filterSelect"
+              value={filter}
                   onChange={(e) => {
                     setFilter(e.target.value as FilterOption);
                     setCurrentPage(1); // Reset to first page when filter changes
                   }}
                   className="h-9 pl-3 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
-                >
-                  <option value="all">All</option>
-                  <option value="used">Used Only</option>
-                  <option value="unused">Unused Only</option>
-                </select>
+            >
+              <option value="all">All</option>
+              <option value="used">Used Only</option>
+              <option value="unused">Unused Only</option>
+            </select>
                 <svg className="pointer-events-none w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -667,29 +667,29 @@ const AdminDBOps: React.FC = () => {
           ) : (
             <div className="flex-1 min-h-0 flex flex-col border-t border-gray-200">
               <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
-                <table className="w-full border-collapse text-sm">
+            <table className="w-full border-collapse text-sm">
                   <thead className="sticky top-0 bg-gray-100 z-10 shadow-sm">
-                    <tr>
+                <tr>
                       <th className="p-2 w-10 bg-gray-100">
-                        <input
-                          type="checkbox"
-                          checked={
-                            paginatedLinks.length > 0 &&
-                            paginatedLinks.every((l) => selectedLinkIds.includes(l.id))
-                          }
-                          onChange={toggleSelectAll}
-                        />
-                      </th>
+                    <input
+                      type="checkbox"
+                      checked={
+                        paginatedLinks.length > 0 &&
+                        paginatedLinks.every((l) => selectedLinkIds.includes(l.id))
+                      }
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                       <th className="p-2 bg-gray-100">Short Link</th>
                       <th className="p-2 bg-gray-100">Long Link</th>
                       <th className="p-2 w-16 bg-gray-100">Used?</th>
                       <th className="p-2 w-32 bg-gray-100">Assigned Phone</th>
                       <th className="p-2 w-32 bg-gray-100">Assigned Email</th>
                       <th className="p-2 w-16 bg-gray-100">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedLinks.map((ln) => (
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedLinks.map((ln) => (
                   <tr key={ln.id} className="border-b hover:bg-gray-50 transition">
                     <td className="p-2">
                       <input
@@ -756,10 +756,10 @@ const AdminDBOps: React.FC = () => {
                       )}
                     </td>
                   </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
             </div>
           )}
 
@@ -848,30 +848,30 @@ const AdminDBOps: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Link URL
-                </label>
-                <input
-                  type="text"
-                  value={editLink.link}
-                  onChange={(e) => setEditLink({ ...editLink, link: e.target.value })}
+            </label>
+            <input
+              type="text"
+              value={editLink.link}
+              onChange={(e) => setEditLink({ ...editLink, link: e.target.value })}
                   className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="Enter link URL"
-                />
+            />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button
+              <button
                   className="px-5 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 
                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all shadow-sm hover:shadow-md font-medium text-sm"
-                  onClick={closeEditModal}
-                >
-                  Cancel
-                </button>
-                <button
+                onClick={closeEditModal}
+              >
+                Cancel
+              </button>
+              <button
                   className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md font-medium text-sm"
-                  onClick={handleSaveLink}
-                >
+                onClick={handleSaveLink}
+              >
                   Save Changes
-                </button>
+              </button>
               </div>
             </div>
           </div>
@@ -907,19 +907,19 @@ const AdminDBOps: React.FC = () => {
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button
+              <button
                   className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
                     focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
-                  onClick={closeDeleteModal}
-                >
-                  Cancel
-                </button>
-                <button
+                onClick={closeDeleteModal}
+              >
+                Cancel
+              </button>
+              <button
                   className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all"
-                  onClick={confirmDeleteLink}
-                >
-                  Delete
-                </button>
+                onClick={confirmDeleteLink}
+              >
+                Delete
+              </button>
               </div>
             </div>
           </div>
@@ -940,19 +940,19 @@ const AdminDBOps: React.FC = () => {
                 <div className="ml-3 flex-1">
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">CSV Upload Result</h3>
                   <p className="text-sm text-gray-600">
-                    {csvSuccessCount !== null
+              {csvSuccessCount !== null
                       ? `Successfully inserted ${csvSuccessCount} new link${csvSuccessCount !== 1 ? 's' : ''}.`
-                      : 'Success!'}
-                  </p>
+                : 'Success!'}
+            </p>
                 </div>
               </div>
               <div className="flex justify-end mt-6">
-                <button
+            <button
                   className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
-                  onClick={closeCsvSuccessModal}
-                >
-                  OK
-                </button>
+              onClick={closeCsvSuccessModal}
+            >
+              OK
+            </button>
               </div>
             </div>
           </div>
@@ -974,23 +974,23 @@ const AdminDBOps: React.FC = () => {
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Links</h3>
                   <p className="text-sm text-gray-600">
                     Are you sure you want to delete {selectedLinkIds.length} selected link{selectedLinkIds.length > 1 ? 's' : ''}? This action cannot be undone.
-                  </p>
+            </p>
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button
+              <button
                   className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 
                     focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md text-sm font-medium"
-                  onClick={() => setShowBulkDeleteModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
+                onClick={() => setShowBulkDeleteModal(false)}
+              >
+                Cancel
+              </button>
+              <button
                   className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 transition-all"
-                  onClick={handleBulkDelete}
-                >
-                  Delete
-                </button>
+                onClick={handleBulkDelete}
+              >
+                Delete
+              </button>
               </div>
             </div>
           </div>

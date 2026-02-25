@@ -1,5 +1,8 @@
 package edu.howard.research.smsbackend.controllers;
 
+import edu.howard.research.smsbackend.models.dto.BulkCompleteByLinksRequest;
+import edu.howard.research.smsbackend.models.dto.BulkCompleteByLinksResponse;
+import edu.howard.research.smsbackend.models.dto.LinkPreviewDto;
 import edu.howard.research.smsbackend.models.dto.LinkUploadRequest;
 import edu.howard.research.smsbackend.models.dto.UploadResult;
 import edu.howard.research.smsbackend.models.entities.GiftCard;
@@ -659,6 +662,52 @@ public class AdminSurveyController {
         }
     }
 
+    // ---------- Preview links before processing ----------
+    @PostMapping("/invitations/preview-links")
+    public ResponseEntity<?> previewLinks(
+            @Valid @RequestBody BulkCompleteByLinksRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        // Check authentication
+        if (!isValidAdminToken(httpRequest)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized access"));
+        }
+
+        try {
+            List<LinkPreviewDto> previews = invitationsService.previewLinks(request.getLinks());
+            return ResponseEntity.ok(previews);
+        } catch (Exception e) {
+            log.error("Failed to preview links", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Failed to preview links: " + e.getMessage()
+            ));
+        }
+    }
+
+    // ---------- Bulk mark invitations as completed by links ----------
+    @PostMapping("/invitations/bulk-complete-by-links")
+    public ResponseEntity<?> bulkCompleteByLinks(
+            @Valid @RequestBody BulkCompleteByLinksRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        // Check authentication
+        if (!isValidAdminToken(httpRequest)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized access"));
+        }
+
+        try {
+            BulkCompleteByLinksResponse response = invitationsService.bulkCompleteByLinks(request.getLinks());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Failed to bulk complete by links", e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Failed to process links: " + e.getMessage()
+            ));
+        }
+    }
+
     // ---------- Clean up orphaned links ----------
     @PostMapping("/links/cleanup-orphaned")
     public ResponseEntity<?> cleanupOrphanedLinks() {
@@ -1026,6 +1075,156 @@ public class AdminSurveyController {
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                 .body(Map.of("error", "Failed to delete link: " + e.getMessage()));
+        }
+    }
+
+    // ---------- Seed Test Data ----------
+    @PostMapping("/seed-test-data")
+    public ResponseEntity<?> seedTestData(HttpServletRequest request) {
+        // Check authentication
+        if (!isValidAdminToken(request)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized access"));
+        }
+
+        try {
+            OffsetDateTime now = OffsetDateTime.now();
+            int createdCount = 0;
+            List<String> createdLinks = new ArrayList<>();
+
+            // Sample data: 15 participants with names, phones, emails
+            String[][] testData = {
+                {"John Smith", "+12025551234", "john.smith@example.com"},
+                {"Sarah Johnson", "+12025551235", "sarah.johnson@example.com"},
+                {"Michael Brown", "+12025551236", "michael.brown@example.com"},
+                {"Emily Davis", "+12025551237", "emily.davis@example.com"},
+                {"David Wilson", "+12025551238", "david.wilson@example.com"},
+                {"Jessica Martinez", "+12025551239", "jessica.martinez@example.com"},
+                {"Christopher Lee", "+12025551240", "christopher.lee@example.com"},
+                {"Amanda White", "+12025551241", "amanda.white@example.com"},
+                {"James Taylor", "+12025551242", "james.taylor@example.com"},
+                {"Lisa Anderson", "+12025551243", "lisa.anderson@example.com"},
+                {"Robert Thomas", "+12025551244", "robert.thomas@example.com"},
+                {"Michelle Jackson", "+12025551245", "michelle.jackson@example.com"},
+                {"William Harris", "+12025551246", "william.harris@example.com"},
+                {"Ashley Martin", "+12025551247", "ashley.martin@example.com"},
+                {"Daniel Thompson", "+12025551248", "daniel.thompson@example.com"}
+            };
+
+            for (int i = 0; i < testData.length; i++) {
+                String[] data = testData[i];
+                String name = data[0];
+                String phone = data[1];
+                String email = data[2];
+
+                // Check if participant already exists
+                Optional<Participant> existingParticipant = participantRepo.findByPhone(phone);
+                Participant participant;
+                
+                if (existingParticipant.isPresent()) {
+                    participant = existingParticipant.get();
+                } else {
+                    // Create participant
+                    participant = new Participant();
+                    participant.setPhone(phone);
+                    participant.setEmail(email);
+                    participant.setName(name);
+                    participant.setPhoneVerified(true);
+                    participant.setStatus(ParticipantStatus.SUBSCRIBED);
+                    participant.setVerifiedAt(now.minusDays(7 + i)); // Stagger verification dates
+                    participant.setConsentAt(now.minusDays(7 + i));
+                    participant = participantRepo.save(participant);
+                }
+
+                // Create a survey link URL (fake Qualtrics URL) - using fixed format for testing
+                final String linkUrl = "https://howard.qualtrics.com/jfe/form/SV_" + 
+                    String.format("%08d", 10000000 + i) + "?Q_DL=TEST" + 
+                    String.format("%04d", i);
+
+                // Check if link already exists
+                final String finalLinkUrl = linkUrl;
+                Optional<SurveyLinkPool> existingLink = linkRepo.findAll().stream()
+                    .filter(l -> l.getLinkUrl().equals(finalLinkUrl))
+                    .findFirst();
+
+                SurveyLinkPool link;
+                if (existingLink.isPresent()) {
+                    link = existingLink.get();
+                } else {
+                    // Create survey link with predictable short code for testing
+                    String desiredShortCode = "test" + String.format("%03d", i);
+                    String shortCode = desiredShortCode;
+                    link = null;
+                    
+                    // Check if short code already exists (from previous seed run)
+                    if (linkRepo.existsByShortCode(desiredShortCode)) {
+                        // If short code exists, check if it's for the same URL
+                        Optional<SurveyLinkPool> existingByShortCode = linkRepo.findByShortCode(desiredShortCode);
+                        if (existingByShortCode.isPresent() && existingByShortCode.get().getLinkUrl().equals(finalLinkUrl)) {
+                            // Same URL and short code - reuse it
+                            link = existingByShortCode.get();
+                        } else {
+                            // Short code exists but for different URL - generate unique one
+                            shortCode = shortLinkService.generateUniqueShortCode();
+                        }
+                    }
+                    
+                    // Only create if we don't have a link yet
+                    if (link == null) {
+                        link = new SurveyLinkPool();
+                        link.setLinkUrl(linkUrl);
+                        link.setBatchLabel("test-data");
+                        link.setStatus(LinkStatus.CLAIMED);
+                        link.setUploadedBy("test-seeder");
+                        link.setShortCode(shortCode);
+                        link.setShortLinkUrl("/s/" + shortCode);
+                        link = linkRepo.save(link);
+                    }
+                }
+
+                // Check if invitation already exists
+                final UUID participantId = participant.getId();
+                Optional<SurveyInvitation> existingInvitation = inviteRepo.findAll().stream()
+                    .filter(inv -> inv.getParticipant().getId().equals(participantId) && 
+                                   inv.getLinkUrl().equals(finalLinkUrl))
+                    .findFirst();
+
+                if (existingInvitation.isEmpty()) {
+                    // Create survey invitation
+                    SurveyInvitation invitation = new SurveyInvitation();
+                    invitation.setParticipant(participant);
+                    invitation.setLink(link);
+                    invitation.setLinkUrl(finalLinkUrl);
+                    invitation.setShortLinkUrl(link.getShortLinkUrl());
+                    invitation.setMessageStatus("delivered");
+                    invitation.setSentAt(now.minusDays(5 + i));
+                    invitation.setDeliveredAt(now.minusDays(5 + i));
+                    
+                    // Mark some as completed (first 5)
+                    if (i < 5) {
+                        invitation.setMessageStatus("completed");
+                        invitation.setCompletedAt(now.minusDays(2 + i));
+                    }
+                    
+                    invitation = inviteRepo.save(invitation);
+                    createdCount++;
+                    createdLinks.add(finalLinkUrl);
+                } else {
+                    createdLinks.add(finalLinkUrl);
+                }
+            }
+
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Test data seeded successfully",
+                "participantsCreated", testData.length,
+                "invitationsCreated", createdCount,
+                "links", createdLinks
+            ));
+        } catch (Exception e) {
+            log.error("Failed to seed test data", e);
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Failed to seed test data: " + e.getMessage()));
         }
     }
 }

@@ -329,6 +329,10 @@ export const api = {
     return api.get('/api/admin/gift-cards/eligible');
   },
 
+  getFailedGiftCards: async () => {
+    return api.get('/api/admin/gift-cards/failed');
+  },
+
   getGiftCards: async (filters: any = {}) => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
@@ -423,6 +427,18 @@ export const api = {
 
   bulkMarkSurveysUncompleted: async (invitationIds: string[]) => {
     return api.post('/api/admin/invitations/bulk-uncomplete', invitationIds);
+  },
+
+  previewLinks: async (links: string[]) => {
+    return api.post('/api/admin/invitations/preview-links', { links });
+  },
+
+  bulkCompleteByLinks: async (links: string[]) => {
+    return api.post('/api/admin/invitations/bulk-complete-by-links', { links });
+  },
+
+  seedTestData: async () => {
+    return api.post('/api/admin/seed-test-data', {});
   },
 
   checkGiftCardForInvitation: async (invitationId: string) => {

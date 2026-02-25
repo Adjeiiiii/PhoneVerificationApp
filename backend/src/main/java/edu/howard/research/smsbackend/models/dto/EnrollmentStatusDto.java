@@ -16,3 +16,6 @@ public class EnrollmentStatusDto {
     private String status; // "OPEN", "FULL", "DISABLED", "UNLIMITED"
 }
 
+
+
+
