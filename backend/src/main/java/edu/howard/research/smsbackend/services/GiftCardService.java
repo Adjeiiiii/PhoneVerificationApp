@@ -22,9 +22,9 @@ public interface GiftCardService {
     List<EligibleParticipantDto> getEligibleParticipants();
 
     /**
-     * Get gift cards that failed to send (status FAILED) with participant and failure info.
+     * Get gift cards that failed to send (status FAILED) with participant and failure info (paged).
      */
-    List<FailedGiftCardDto> getFailedGiftCards();
+    Page<FailedGiftCardDto> getFailedGiftCards(Pageable pageable);
 
     /**
      * Send gift card to participant (admin action)

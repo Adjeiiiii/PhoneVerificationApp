@@ -115,6 +115,10 @@ const GiftCardManagement: React.FC = () => {
   // Failed gift cards (status FAILED - send failed)
   const [failedGiftCards, setFailedGiftCards] = useState<FailedGiftCard[]>([]);
   const [selectedFailedIds, setSelectedFailedIds] = useState<string[]>([]);
+  const [failedPage, setFailedPage] = useState<number>(0);
+  const [failedPageSize, setFailedPageSize] = useState<number>(20);
+  const [failedTotalPages, setFailedTotalPages] = useState<number>(0);
+  const [failedTotalElements, setFailedTotalElements] = useState<number>(0);
   
   // Bulk selection for eligible participants
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
@@ -303,11 +307,20 @@ const GiftCardManagement: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, sentPage, sentPageSize]);
 
+  // Refetch failed gift cards when on failed tab and page/size change
+  useEffect(() => {
+    if (activeTab === 'failed') {
+      fetchFailedGiftCards();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, failedPage, failedPageSize]);
+
   const fetchData = async () => {
     await Promise.all([
       fetchPoolStatus(),
       fetchPoolData(),
       fetchEligibleParticipants(),
+      fetchFailedGiftCards(),
       fetchSentGiftCards()
     ]);
   };
@@ -347,10 +360,16 @@ const GiftCardManagement: React.FC = () => {
     }
   };
 
-  const fetchFailedGiftCards = async () => {
+  const fetchFailedGiftCards = async (pageOverride?: number, sizeOverride?: number) => {
     try {
-      const list = await api.getFailedGiftCards();
-      setFailedGiftCards(Array.isArray(list) ? list : []);
+      const page = pageOverride ?? failedPage;
+      const size = sizeOverride ?? failedPageSize;
+      const response = await api.getFailedGiftCards(page, size);
+      setFailedGiftCards(response?.content ?? []);
+      setFailedTotalElements(response?.totalElements ?? 0);
+      setFailedTotalPages(response?.totalPages ?? 0);
+      if (pageOverride !== undefined) setFailedPage(pageOverride);
+      if (sizeOverride !== undefined) setFailedPageSize(sizeOverride);
     } catch (error) {
       console.error('Error fetching failed gift cards:', error);
       setFailedGiftCards([]);
@@ -1208,7 +1227,7 @@ const GiftCardManagement: React.FC = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Failed ({failedGiftCards.length})
+                Failed ({failedTotalElements})
               </button>
               <button
                 onClick={() => setActiveTab('sent')}
@@ -1792,6 +1811,45 @@ const GiftCardManagement: React.FC = () => {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200 flex-shrink-0">
+                      <div className="text-sm text-gray-600">
+                        Showing {failedTotalElements === 0 ? 0 : failedPage * failedPageSize + 1}–{Math.min((failedPage + 1) * failedPageSize, failedTotalElements)} of {failedTotalElements}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setFailedPage(Math.max(failedPage - 1, 0))}
+                          disabled={failedPage === 0}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-600">
+                          Page {failedPage + 1} of {failedTotalPages || 1}
+                        </span>
+                        <button
+                          onClick={() => setFailedPage(failedPage + 1)}
+                          disabled={failedTotalPages ? failedPage + 1 >= failedTotalPages : false}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                        <div className="relative">
+                          <select
+                            value={failedPageSize}
+                            onChange={(e) => { setFailedPageSize(parseInt(e.target.value, 10)); setFailedPage(0); }}
+                            className="h-9 pl-3 pr-8 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                          >
+                            <option value={10}>10 per page</option>
+                            <option value={20}>20 per page</option>
+                            <option value={50}>50 per page</option>
+                            <option value={100}>100 per page</option>
+                          </select>
+                          <svg className="pointer-events-none w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

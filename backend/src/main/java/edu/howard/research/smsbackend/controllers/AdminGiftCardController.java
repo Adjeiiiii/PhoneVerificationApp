@@ -43,11 +43,15 @@ public class AdminGiftCardController {
     }
 
     /**
-     * Get gift cards that failed to send (status FAILED) with participant and failure info.
+     * Get gift cards that failed to send (status FAILED) with participant and failure info (paged).
      */
     @GetMapping("/failed")
-    public ResponseEntity<List<FailedGiftCardDto>> getFailedGiftCards() {
-        List<FailedGiftCardDto> failed = giftCardService.getFailedGiftCards();
+    public ResponseEntity<Page<FailedGiftCardDto>> getFailedGiftCards(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<FailedGiftCardDto> failed = giftCardService.getFailedGiftCards(pageable);
         return ResponseEntity.ok(failed);
     }
 

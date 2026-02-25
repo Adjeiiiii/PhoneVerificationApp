@@ -91,11 +91,10 @@ public class GiftCardServiceImpl implements GiftCardService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<FailedGiftCardDto> getFailedGiftCards() {
-        List<GiftCard> failedCards = giftCardRepository.findByStatusOrderByCreatedAtDesc(
-                GiftCardStatus.FAILED, PageRequest.of(0, 500)).getContent();
+    public Page<FailedGiftCardDto> getFailedGiftCards(Pageable pageable) {
+        Page<GiftCard> page = giftCardRepository.findByStatusOrderByCreatedAtDesc(GiftCardStatus.FAILED, pageable);
         List<FailedGiftCardDto> result = new ArrayList<>();
-        for (GiftCard gc : failedCards) {
+        for (GiftCard gc : page.getContent()) {
             Participant p = gc.getParticipant();
             SurveyInvitation si = gc.getInvitation();
             OffsetDateTime failedAt = gc.getUpdatedAt() != null ? gc.getUpdatedAt() : gc.getSentAt();
@@ -113,7 +112,7 @@ public class GiftCardServiceImpl implements GiftCardService {
                     failureReason
             ));
         }
-        return result;
+        return new org.springframework.data.domain.PageImpl<>(result, page.getPageable(), page.getTotalElements());
     }
 
     /** Extract failure reason from the most recent distribution log entry for this gift card. */

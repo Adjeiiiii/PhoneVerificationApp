@@ -329,8 +329,8 @@ export const api = {
     return api.get('/api/admin/gift-cards/eligible');
   },
 
-  getFailedGiftCards: async () => {
-    return api.get('/api/admin/gift-cards/failed');
+  getFailedGiftCards: async (page = 0, size = 20) => {
+    return api.get(`/api/admin/gift-cards/failed?page=${page}&size=${size}`);
   },
 
   getGiftCards: async (filters: any = {}) => {
