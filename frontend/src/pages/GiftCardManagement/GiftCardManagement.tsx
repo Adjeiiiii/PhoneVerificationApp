@@ -41,6 +41,19 @@ interface EligibleParticipant {
   participantVerifiedAt: string;
 }
 
+interface FailedGiftCard {
+  giftCardId: string;
+  participantId: string;
+  participantName: string | null;
+  participantPhone: string;
+  participantEmail: string | null;
+  invitationId: string;
+  surveyLinkUrl: string | null;
+  surveyCompletedAt: string | null;
+  failedAt: string | null;
+  failureReason: string | null;
+}
+
 interface GiftCard {
   id: string;
   participantId: string;
@@ -85,7 +98,7 @@ interface UnsentGiftCard {
 
 const GiftCardManagement: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'pool' | 'eligible' | 'sent' | 'unsent'>('pool');
+  const [activeTab, setActiveTab] = useState<'pool' | 'eligible' | 'failed' | 'sent' | 'unsent'>('pool');
   
   // Pool status and cards
   const [poolStatus, setPoolStatus] = useState<GiftCardPoolStatus | null>(null);
@@ -98,6 +111,10 @@ const GiftCardManagement: React.FC = () => {
   
   // Eligible participants
   const [eligibleParticipants, setEligibleParticipants] = useState<EligibleParticipant[]>([]);
+  
+  // Failed gift cards (status FAILED - send failed)
+  const [failedGiftCards, setFailedGiftCards] = useState<FailedGiftCard[]>([]);
+  const [selectedFailedIds, setSelectedFailedIds] = useState<string[]>([]);
   
   // Bulk selection for eligible participants
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
@@ -157,6 +174,7 @@ const GiftCardManagement: React.FC = () => {
     fetchNextAvailableCard();
   }, [showSendModal]);
   const [showBulkSendModal, setShowBulkSendModal] = useState(false);
+  const [bulkSendSource, setBulkSendSource] = useState<'eligible' | 'failed'>('eligible');
   const [showBulkSendResults, setShowBulkSendResults] = useState(false);
   const [bulkSendResults, setBulkSendResults] = useState<any>(null);
   const [showUploadResults, setShowUploadResults] = useState(false);
@@ -248,11 +266,14 @@ const GiftCardManagement: React.FC = () => {
     // Clear selections when switching tabs
     setSelectedParticipantIds([]);
     setSelectedPoolCardIds([]);
+    setSelectedFailedIds([]);
     
     if (activeTab === 'pool') {
       fetchPoolData();
     } else if (activeTab === 'eligible') {
       fetchEligibleParticipants();
+    } else if (activeTab === 'failed') {
+      fetchFailedGiftCards();
     } else if (activeTab === 'sent') {
       fetchSentGiftCards();
     } else if (activeTab === 'unsent') {
@@ -310,6 +331,16 @@ const GiftCardManagement: React.FC = () => {
       setEligibleParticipants(participants || []);
     } catch (error) {
       console.error('Error fetching eligible participants:', error);
+    }
+  };
+
+  const fetchFailedGiftCards = async () => {
+    try {
+      const list = await api.getFailedGiftCards();
+      setFailedGiftCards(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('Error fetching failed gift cards:', error);
+      setFailedGiftCards([]);
     }
   };
 
@@ -638,21 +669,82 @@ const GiftCardManagement: React.FC = () => {
       setMessage({ type: 'error', text: 'Please select at least one participant' });
       return;
     }
+    setBulkSendSource('eligible');
     setShowBulkSendModal(true);
   };
 
+  const toggleSelectFailed = (giftCardId: string) => {
+    setSelectedFailedIds((prev) =>
+      prev.includes(giftCardId) ? prev.filter((id) => id !== giftCardId) : [...prev, giftCardId]
+    );
+  };
+
+  const toggleSelectAllFailed = () => {
+    const allSelected = failedGiftCards.every((f) => selectedFailedIds.includes(f.giftCardId));
+    if (allSelected) {
+      setSelectedFailedIds([]);
+    } else {
+      setSelectedFailedIds(failedGiftCards.map((f) => f.giftCardId));
+    }
+  };
+
+  const handleResetFailed = async (giftCardId: string) => {
+    setLoading(true);
+    try {
+      await api.unsendGiftCard(giftCardId);
+      setMessage({ type: 'success', text: 'Reset to eligible. Participant now appears in Eligible.' });
+      await fetchFailedGiftCards();
+      await fetchEligibleParticipants();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to reset' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkSendFailedClick = () => {
+    if (selectedFailedIds.length === 0) {
+      setMessage({ type: 'error', text: 'Please select at least one failed gift card' });
+      return;
+    }
+    setShowBulkSendModal(true);
+    setBulkSendSource('failed');
+  };
+
+  const handleBulkResetFailedClick = async () => {
+    if (selectedFailedIds.length === 0) return;
+    setLoading(true);
+    try {
+      for (const id of selectedFailedIds) {
+        await api.unsendGiftCard(id);
+      }
+      setMessage({ type: 'success', text: `Reset ${selectedFailedIds.length} to eligible.` });
+      setSelectedFailedIds([]);
+      await fetchFailedGiftCards();
+      await fetchEligibleParticipants();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to reset some' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleBulkSendGiftCards = async (_cardType: string, _cardValue: number, deliveryMethod: string) => {
-    if (selectedParticipantIds.length === 0) {
+    const isFromFailed = bulkSendSource === 'failed';
+    const selectedIds = isFromFailed ? selectedFailedIds : selectedParticipantIds;
+    const sourceList = isFromFailed ? failedGiftCards : eligibleParticipants;
+
+    if (selectedIds.length === 0) {
       setMessage({ type: 'error', text: 'No participants selected' });
       return;
     }
 
     // Check if we have enough cards in the pool
     const availableCards = poolStatus?.availableCards || 0;
-    if (availableCards < selectedParticipantIds.length) {
+    if (availableCards < selectedIds.length) {
       setMessage({ 
         type: 'error', 
-        text: `Insufficient gift cards. You need ${selectedParticipantIds.length} cards but only ${availableCards} are available. Please add more cards or reduce your selection.` 
+        text: `Insufficient gift cards. You need ${selectedIds.length} cards but only ${availableCards} are available. Please add more cards or reduce your selection.` 
       });
       setShowBulkSendModal(false);
       return;
@@ -662,42 +754,33 @@ const GiftCardManagement: React.FC = () => {
     setShowBulkSendModal(false);
 
     try {
-      // Prepare participants for batch send
-      const participants = selectedParticipantIds.map(participantId => {
-        const participant = eligibleParticipants.find((p) => p.participantId === participantId);
-        if (!participant) {
-          throw new Error(`Participant ${participantId} not found`);
+      const participants = selectedIds.map((id) => {
+        if (isFromFailed) {
+          const row = (sourceList as FailedGiftCard[]).find((f) => f.giftCardId === id);
+          if (!row) throw new Error(`Failed gift card ${id} not found`);
+          return { participantId: row.participantId, invitationId: row.invitationId };
+        } else {
+          const participant = (sourceList as EligibleParticipant[]).find((p) => p.participantId === id);
+          if (!participant) throw new Error(`Participant ${id} not found`);
+          return { participantId: participant.participantId, invitationId: participant.invitationId };
         }
-        return {
-          participantId: participant.participantId,
-          invitationId: participant.invitationId
-        };
       });
 
-      // Use batch endpoint
       const result = await api.batchSendGiftCards(participants, deliveryMethod, '');
-
-      // Store results and show modal
       setBulkSendResults(result);
       setShowBulkSendResults(true);
 
-      // Show summary message
       if (result.failed === 0) {
-        setMessage({ 
-          type: 'success', 
-          text: `Successfully sent ${result.successful} gift card${result.successful !== 1 ? 's' : ''}!` 
-        });
+        setMessage({ type: 'success', text: `Successfully sent ${result.successful} gift card${result.successful !== 1 ? 's' : ''}!` });
       } else {
-        setMessage({ 
-          type: 'error', 
-          text: `Sent ${result.successful} gift card${result.successful !== 1 ? 's' : ''}, ${result.failed} failed. See details below.` 
-        });
+        setMessage({ type: 'error', text: `Sent ${result.successful}, ${result.failed} failed. See details below.` });
       }
 
-      // Clear selection and refresh data
       setSelectedParticipantIds([]);
+      setSelectedFailedIds([]);
       await fetchPoolStatus();
       await fetchEligibleParticipants();
+      await fetchFailedGiftCards();
       await fetchSentGiftCards();
       await fetchPoolData();
     } catch (error: any) {
@@ -757,6 +840,7 @@ const GiftCardManagement: React.FC = () => {
       // Refresh the data
       await fetchPoolStatus(); // Refresh stats/numbers
       await fetchEligibleParticipants();
+      await fetchFailedGiftCards();
       await fetchSentGiftCards();
       await fetchPoolData(); // Also refresh pool data since card status will change
     } catch (error: any) {
@@ -1096,6 +1180,16 @@ const GiftCardManagement: React.FC = () => {
                 }`}
               >
                 Eligible Participants ({eligibleParticipants.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('failed')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'failed'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Failed ({failedGiftCards.length})
               </button>
               <button
                 onClick={() => setActiveTab('sent')}
@@ -1567,6 +1661,119 @@ const GiftCardManagement: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Failed Gift Cards Tab */}
+            {activeTab === 'failed' && (
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Failed Gift Cards</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Gift cards that failed to send. Send again with a new code or reset to move back to Eligible.
+                    </p>
+                  </div>
+                </div>
+
+                {failedGiftCards.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center py-16">
+                    <div className="text-center">
+                      <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <h3 className="mt-4 text-lg font-medium text-gray-900">No failed gift cards</h3>
+                      <p className="mt-2 text-sm text-gray-500">
+                        Failed sends will appear here. You can resend or reset to eligible.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    {selectedFailedIds.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 flex items-center justify-between flex-shrink-0">
+                        <span className="text-sm font-medium text-amber-900">
+                          {selectedFailedIds.length} selected
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleBulkSendFailedClick}
+                            disabled={loading}
+                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            Send Gift Cards
+                          </button>
+                          <button
+                            onClick={handleBulkResetFailedClick}
+                            disabled={loading}
+                            className="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                          >
+                            Reset to Eligible
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-y-auto overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                              <input
+                                type="checkbox"
+                                checked={failedGiftCards.length > 0 && failedGiftCards.every((f) => selectedFailedIds.includes(f.giftCardId))}
+                                onChange={toggleSelectAllFailed}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              />
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Survey Completed</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Failed At</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Failure Reason</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {failedGiftCards.map((row) => (
+                            <tr key={row.giftCardId} className="hover:bg-gray-50 transition">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedFailedIds.includes(row.giftCardId)}
+                                  onChange={() => toggleSelectFailed(row.giftCardId)}
+                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{row.participantPhone}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.participantEmail || 'N/A'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.surveyCompletedAt ? formatDate(row.surveyCompletedAt) : '—'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.failedAt ? formatDate(row.failedAt) : '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={row.failureReason || undefined}>{row.failureReason || '—'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                <button
+                                  onClick={() => {
+                                    setSendData({ ...sendData, participantId: row.participantId, invitationId: row.invitationId });
+                                    setShowSendModal(true);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-900"
+                                >
+                                  Send Gift Card
+                                </button>
+                                <button
+                                  onClick={() => handleResetFailed(row.giftCardId)}
+                                  disabled={loading}
+                                  className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                                >
+                                  Reset
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2468,7 +2675,9 @@ const GiftCardManagement: React.FC = () => {
       )}
 
       {/* Bulk Send Gift Cards Modal */}
-      {showBulkSendModal && (
+      {showBulkSendModal && (() => {
+        const bulkCount = bulkSendSource === 'failed' ? selectedFailedIds.length : selectedParticipantIds.length;
+        return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
             <div className="p-6">
@@ -2481,19 +2690,19 @@ const GiftCardManagement: React.FC = () => {
                 <div className="ml-3 flex-1">
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">Send Gift Cards to Multiple Participants</h3>
                   <p className="text-sm text-gray-600 mb-3">
-                    You are about to send gift cards to {selectedParticipantIds.length} participant{selectedParticipantIds.length !== 1 ? 's' : ''}.
+                    You are about to send gift cards to {bulkCount} participant{bulkCount !== 1 ? 's' : ''}.
                   </p>
                   
                   {/* Card Availability Check */}
                   {poolStatus && (
                     <div className={`mt-3 p-3 rounded-lg border ${
-                      (poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                      (poolStatus.availableCards || 0) >= bulkCount
                         ? 'bg-green-50 border-green-200'
                         : 'bg-red-50 border-red-200'
                     }`}>
                       <div className="flex items-start">
                         <div className="flex-shrink-0">
-                          {(poolStatus.availableCards || 0) >= selectedParticipantIds.length ? (
+                          {(poolStatus.availableCards || 0) >= bulkCount ? (
                             <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
@@ -2505,21 +2714,21 @@ const GiftCardManagement: React.FC = () => {
                         </div>
                         <div className="ml-3">
                           <p className={`text-sm font-medium ${
-                            (poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                            (poolStatus.availableCards || 0) >= bulkCount
                               ? 'text-green-800'
                               : 'text-red-800'
                           }`}>
-                            {(poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                            {(poolStatus.availableCards || 0) >= bulkCount
                               ? 'Sufficient cards available'
                               : 'Insufficient cards available'}
                           </p>
                           <p className={`text-xs mt-1 ${
-                            (poolStatus.availableCards || 0) >= selectedParticipantIds.length
+                            (poolStatus.availableCards || 0) >= bulkCount
                               ? 'text-green-700'
                               : 'text-red-700'
                           }`}>
-                            Available: {poolStatus.availableCards || 0} | Needed: {selectedParticipantIds.length}
-                            {(poolStatus.availableCards || 0) < selectedParticipantIds.length && (
+                            Available: {poolStatus.availableCards || 0} | Needed: {bulkCount}
+                            {(poolStatus.availableCards || 0) < bulkCount && (
                               <span className="block mt-1 font-medium">
                                 Please add more cards or reduce your selection.
                               </span>
@@ -2560,16 +2769,17 @@ const GiftCardManagement: React.FC = () => {
                     const deliveryMethod = (document.getElementById('bulkDeliveryMethod') as HTMLSelectElement)?.value || 'EMAIL';
                     handleBulkSendGiftCards('AMAZON', 25.00, deliveryMethod);
                   }}
-                  disabled={loading || !poolStatus || (poolStatus.availableCards || 0) < selectedParticipantIds.length}
+                  disabled={loading || !poolStatus || (poolStatus.availableCards || 0) < bulkCount}
                   className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors shadow-sm hover:shadow-md"
                 >
-                  {loading ? 'Sending...' : `Send to ${selectedParticipantIds.length} Participant${selectedParticipantIds.length !== 1 ? 's' : ''}`}
+                  {loading ? 'Sending...' : `Send to ${bulkCount} Participant${bulkCount !== 1 ? 's' : ''}`}
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Bulk Send Results Modal */}
       {showBulkSendResults && bulkSendResults && (

@@ -90,6 +90,50 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<FailedGiftCardDto> getFailedGiftCards() {
+        List<GiftCard> failedCards = giftCardRepository.findByStatusOrderByCreatedAtDesc(
+                GiftCardStatus.FAILED, PageRequest.of(0, 500)).getContent();
+        List<FailedGiftCardDto> result = new ArrayList<>();
+        for (GiftCard gc : failedCards) {
+            Participant p = gc.getParticipant();
+            SurveyInvitation si = gc.getInvitation();
+            OffsetDateTime failedAt = gc.getUpdatedAt() != null ? gc.getUpdatedAt() : gc.getSentAt();
+            String failureReason = extractFailureReason(gc.getId());
+            result.add(new FailedGiftCardDto(
+                    gc.getId(),
+                    p != null ? p.getId() : null,
+                    p != null ? p.getName() : null,
+                    p != null ? p.getPhone() : null,
+                    p != null ? p.getEmail() : null,
+                    si != null ? si.getId() : null,
+                    si != null ? si.getLinkUrl() : null,
+                    si != null ? si.getCompletedAt() : null,
+                    failedAt,
+                    failureReason
+            ));
+        }
+        return result;
+    }
+
+    /** Extract failure reason from the most recent distribution log entry for this gift card. */
+    private String extractFailureReason(UUID giftCardId) {
+        List<GiftCardDistributionLog> logs = distributionLogRepository.findByGiftCardIdOrderByCreatedAtDesc(giftCardId);
+        for (GiftCardDistributionLog logEntry : logs) {
+            Map<String, Object> details = logEntry.getDetails();
+            if (details == null) continue;
+            Object err = details.get("error_message");
+            if (err != null && err.toString().length() > 0) return err.toString();
+            Object emailErr = details.get("email_error_message");
+            if (emailErr != null && emailErr.toString().length() > 0) return emailErr.toString();
+            Boolean emailSent = details.get("email_sent") instanceof Boolean ? (Boolean) details.get("email_sent") : null;
+            if (Boolean.FALSE.equals(emailSent) && details.containsKey("error_message"))
+                return String.valueOf(details.get("error_message"));
+        }
+        return "Delivery failed";
+    }
+
+    @Override
     @Transactional(noRollbackFor = IllegalStateException.class)
     public GiftCardDto sendGiftCard(UUID participantId, SendGiftCardRequest request, String adminUsername) {
         // Get participant

@@ -76,12 +76,14 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, UUID> {
     boolean existsByParticipantIdAndInvitationId(UUID participantId, UUID invitationId);
 
     /**
-     * Find participants eligible for gift cards (completed surveys, no gift card yet)
+     * Find participants eligible for gift cards (completed surveys, no successful send yet).
+     * Excludes anyone with a gift card in SENT, DELIVERED, REDEEMED, PENDING, or FAILED.
+     * So only "no gift card" or "UNSENT" appear in Eligible; FAILED stay in Failed tab.
      */
     @Query("SELECT DISTINCT p, si FROM Participant p " +
            "JOIN SurveyInvitation si ON si.participant = p " +
            "WHERE si.completedAt IS NOT NULL " +
-           "AND NOT EXISTS (SELECT 1 FROM GiftCard gc WHERE gc.participant = p AND gc.invitation = si AND gc.status != 'UNSENT') " +
+           "AND NOT EXISTS (SELECT 1 FROM GiftCard gc WHERE gc.participant = p AND gc.invitation = si AND gc.status IN ('SENT', 'DELIVERED', 'REDEEMED', 'PENDING', 'FAILED')) " +
            "ORDER BY si.completedAt DESC")
     List<Object[]> findEligibleParticipants();
 

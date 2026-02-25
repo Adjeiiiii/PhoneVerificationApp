@@ -329,6 +329,10 @@ export const api = {
     return api.get('/api/admin/gift-cards/eligible');
   },
 
+  getFailedGiftCards: async () => {
+    return api.get('/api/admin/gift-cards/failed');
+  },
+
   getGiftCards: async (filters: any = {}) => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
