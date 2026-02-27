@@ -99,22 +99,19 @@ const Landing: React.FC = () => {
             {/* Welcome Section */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
           <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8">
-            <h1 className="text-3xl font-bold text-white text-center mb-4">
-              Welcome to Our Research Study
+            <h1 className="text-3xl font-bold text-white text-center">
+              Welcome to Howard University's Research Study
             </h1>
-            <p className="text-blue-100 text-center text-lg">
-              Exploring AI in Healthcare Decision Making
-            </p>
           </div>
           <div className="p-6 md:p-8">
             <div className="prose prose-lg max-w-none">
               <p className="text-gray-700 mb-6">
-                We are conducting an academic research study on how individuals use generative AI tools—such as ChatGPT—to seek and explore health-related information. Your input will contribute to ongoing research focused on improving how AI technologies support users in making informed health decisions.
+                Exploring AI in Healthcare We are conducting an academic research study on how individuals use generative Artificial Intelligence (AI) tools—such as ChatGPT—to seek and explore health-related information. Your input will contribute to ongoing research focused on improving how AI technologies support users in making informed health decisions.
               </p>
               <div className="bg-blue-50 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold text-blue-900 mb-4">Study Leadership</h3>
                 <p className="text-blue-800">
-                  This study is led by researchers at Howard University.
+                  This study is led by researchers at Howard University, including Jae Eun Chung, PhD., Jiang Li, PhD., Meirong Lui, PhD., and Amy Quarkume, PhD.
                 </p>
               </div>
             </div>
@@ -195,7 +192,7 @@ const Landing: React.FC = () => {
                     </svg>
                   </div>
                   <p className="ml-3 text-gray-700">
-                    Send you your gift card reward upon survey completion
+                    Send you your Amazon gift card upon survey completion
                   </p>
                 </div>
               </div>
@@ -293,9 +290,13 @@ const Landing: React.FC = () => {
         {!loadingEnrollment && !enrollmentFull && (
           <div className="mt-8 text-center">
             <p className="text-gray-600">
-              Need help? Contact our research support team at{' '}
+              Need help? Contact our research team at{' '}
               <a href="mailto:ai@networks.howard.edu" className="text-blue-600 hover:text-blue-800">
                 ai@networks.howard.edu
+              </a>
+              {' or '}
+              <a href="tel:+12404288442" className="text-blue-600 hover:text-blue-800">
+                (240) 428-8442
               </a>
             </p>
           </div>
