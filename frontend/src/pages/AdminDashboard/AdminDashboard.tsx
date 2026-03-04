@@ -31,7 +31,7 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
 
   // Stats
-  const [stats, setStats] = useState<Stats>({
+  const [, setStats] = useState<Stats>({
     totalVerifications: 0,
     usedLinks: 0,
     availableLinks: 0,
@@ -137,15 +137,13 @@ const AdminDashboard: React.FC = () => {
     if (showLinkSelectionModal) {
       api.get('/api/admin/links?status=AVAILABLE&page=0&size=100')
         .then((data: any) => {
-          console.log('Refreshed available links data:', data);
           if (data && data.content) {
             setAvailableLinks(data.content);
           } else {
             setAvailableLinks([]);
           }
         })
-        .catch((err) => {
-          console.error('Available links refresh error:', err);
+        .catch(() => {
           setAvailableLinks([]);
         });
     }
@@ -218,22 +216,18 @@ const AdminDashboard: React.FC = () => {
 
 
   const fetchStatsAndRecords = () => {
-    console.log('Fetching stats and records...');
     // 1) stats
     api.get('/api/admin/stats')
       .then((data) => {
-        console.log('Stats data:', data);
         if (data) setStats(data);
       })
-      .catch((err) => {
-        console.error('Stats error:', err);
+      .catch(() => {
         setStats({ totalVerifications: 0, usedLinks: 0, availableLinks: 0 });
       });
 
     // 2) invitations (instead of verifications) - fetch with larger page size
     api.get('/api/admin/invitations?page=0&size=1000')
       .then((data: any) => {
-        console.log('Invitations data:', data);
         if (data && data.content) {
           // Convert backend format to frontend format
           const convertedRecords = data.content.map((invitation: any) => ({
@@ -250,45 +244,38 @@ const AdminDashboard: React.FC = () => {
             completed_at: invitation.completedAt || null, // Survey completion timestamp
             signup_ip: invitation.participant?.signupIp || null
           }));
-          console.log('Converted records:', convertedRecords);
           setRecords(convertedRecords);
         } else {
-          console.log('No content in invitations data');
           setRecords([]);
         }
       })
-      .catch((err) => {
-        console.error('Records error:', err);
+      .catch(() => {
         setRecords([]);
       });
 
     // 3) Fetch verified participants without invitations
     api.get('/api/admin/participants/verified-without-invitations?page=0&size=100')
       .then((data: any) => {
-        console.log('Verified without invitations data:', data);
         if (data && data.content) {
           setVerifiedWithoutInvitations(data.content);
         } else {
           setVerifiedWithoutInvitations([]);
         }
       })
-      .catch((err) => {
-        console.error('Verified without invitations error:', err);
+      .catch(() => {
         setVerifiedWithoutInvitations([]);
       });
 
     // 4) Fetch available links for selection
     api.get('/api/admin/links?status=AVAILABLE&page=0&size=100')
       .then((data: any) => {
-        console.log('Available links data:', data);
         if (data && data.content) {
           setAvailableLinks(data.content);
         } else {
           setAvailableLinks([]);
         }
       })
-      .catch((err) => {
-        console.error('Available links error:', err);
+      .catch(() => {
         setAvailableLinks([]);
       });
 
@@ -376,7 +363,6 @@ const AdminDashboard: React.FC = () => {
           return;
         }
       } catch (error) {
-        console.error('Error checking for gift card:', error);
         // Continue anyway if check fails
       }
     }
@@ -396,7 +382,6 @@ const AdminDashboard: React.FC = () => {
       setShowMarkCompletedConfirmModal(false);
       setMarkCompletedRecord(null);
     } catch (error) {
-      console.error('Error marking survey as completed:', error);
       setBulkActionMessage('Failed to mark survey as completed. Please try again.');
       setShowMarkCompletedConfirmModal(false);
       setMarkCompletedRecord(null);
@@ -414,7 +399,6 @@ const AdminDashboard: React.FC = () => {
       setShowMarkCompletedConfirmModal(false);
       setMarkCompletedRecord(null);
     } catch (error) {
-      console.error('Error marking survey as not completed:', error);
       setBulkActionMessage('Failed to mark survey as not completed. Please try again.');
       setShowMarkCompletedConfirmModal(false);
       setMarkCompletedRecord(null);
@@ -447,8 +431,7 @@ const AdminDashboard: React.FC = () => {
         // Show success message
         setBulkActionMessage('Email updated successfully');
       })
-      .catch((err) => {
-        console.error('Update error:', err);
+      .catch(() => {
         setBulkActionMessage('Failed to save changes');
       });
   };
@@ -482,8 +465,7 @@ const AdminDashboard: React.FC = () => {
         setShowRemindConfirmModal(false);
         setRemindRecord(null);
       })
-      .catch((err) => {
-        console.error('Resend error:', err);
+      .catch(() => {
         setBulkActionMessage('Failed to send reminder');
         setShowRemindConfirmModal(false);
         setRemindRecord(null);
@@ -516,7 +498,7 @@ const AdminDashboard: React.FC = () => {
         );
         fetchStatsAndRecords();
       })
-      .catch((err) => console.error('Bulk resend error:', err));
+      .catch(() => {});
   };
 
   // Called by the modal's "Resend" button to confirm bulk resend
@@ -528,7 +510,6 @@ const AdminDashboard: React.FC = () => {
   // Bulk mark surveys as completed
   const handleBulkMarkSurveysCompleted = async () => {
     try {
-      console.log('Attempting to mark surveys as completed:', selectedRecordIds);
       
       if (selectedRecordIds.length === 0) {
         setBulkActionMessage('No surveys selected');
@@ -536,7 +517,6 @@ const AdminDashboard: React.FC = () => {
       }
       
       const response = await api.bulkMarkSurveysCompleted(selectedRecordIds);
-      console.log('Bulk complete response:', response);
       
       if (response && response.success) {
         setBulkActionMessage(`Successfully marked ${response.completedCount} surveys as completed`);
@@ -546,7 +526,6 @@ const AdminDashboard: React.FC = () => {
         setBulkActionMessage(`Error: ${response?.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Bulk mark completed error:', error);
       setBulkActionMessage(`Error marking surveys as completed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -554,7 +533,6 @@ const AdminDashboard: React.FC = () => {
   // Bulk mark surveys as not completed
   const handleBulkMarkSurveysUncompleted = async () => {
     try {
-      console.log('Attempting to mark surveys as not completed:', selectedRecordIds);
       
       if (selectedRecordIds.length === 0) {
         setBulkActionMessage('No surveys selected');
@@ -562,7 +540,6 @@ const AdminDashboard: React.FC = () => {
       }
       
       const response = await api.bulkMarkSurveysUncompleted(selectedRecordIds);
-      console.log('Bulk uncomplete response:', response);
       
       if (response && response.success) {
         setBulkActionMessage(`Successfully marked ${response.uncompletedCount} surveys as not completed`);
@@ -572,7 +549,6 @@ const AdminDashboard: React.FC = () => {
         setBulkActionMessage(`Error: ${response?.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Bulk mark uncompleted error:', error);
       setBulkActionMessage(`Error marking surveys as not completed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -586,7 +562,6 @@ const AdminDashboard: React.FC = () => {
       const giftCardInfo = await api.getUserDeletionInfo(rec.id);
       setDeleteGiftCardInfo(giftCardInfo);
     } catch (error) {
-      console.error('Error checking gift cards:', error);
       setDeleteGiftCardInfo({ hasGiftCards: false, giftCardCount: 0 });
     }
     
@@ -621,14 +596,7 @@ const AdminDashboard: React.FC = () => {
         setBulkActionMessage(message);
       })
       .catch((err: any) => {
-        console.error('Delete error:', err);
-        console.error('Error details:', {
-          message: err.message,
-          status: err.status,
-          stack: err.stack
-        });
-        // Show the actual error message from the backend
-        const errorMessage = err.message || 'Failed to delete user. Please try again.';
+        const errorMessage = err?.message || 'Failed to delete user. Please try again.';
         setBulkActionMessage(errorMessage);
         // Keep modal open so user can see the error
         // Don't close the modal on error
@@ -655,8 +623,7 @@ const AdminDashboard: React.FC = () => {
         // Show success message
         setBulkActionMessage('Selected users deleted successfully');
       })
-      .catch((err) => {
-        console.error('Bulk delete error:', err);
+      .catch(() => {
         setBulkActionMessage('Failed to delete some users');
       });
   };
@@ -694,7 +661,6 @@ const AdminDashboard: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [activeActionMenu]);
 
-  console.log('AdminDashboard rendering, records:', records.length, 'stats:', stats);
   
   return (
     <AdminLayout 
@@ -1378,7 +1344,6 @@ const AdminDashboard: React.FC = () => {
                               const previews = await api.previewLinks(lines);
                               setLinkPreviews(previews);
                             } catch (error: any) {
-                              console.error('Failed to load preview:', error);
                               setBulkCompleteError('Failed to load preview data');
                             } finally {
                               setIsLoadingPreview(false);

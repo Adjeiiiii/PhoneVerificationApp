@@ -56,10 +56,10 @@ services:
       BITLY_API_TOKEN: ${BITLY_API_TOKEN:-}
 
       # ---- Admin Configuration ----
-      # Note: JWT_SECRET and ADMIN_PASSWORD will be auto-generated if not provided
+      # Set JWT_SECRET in .env for production; default allows local dev without .env
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-3600000}
     ports:
       - "8080:8080"

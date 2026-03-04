@@ -32,6 +32,9 @@ const Survey: React.FC = () => {
   const [showSurveyFailModal, setShowSurveyFailModal] = useState(false);
   const [showContactDetailsModal, setShowContactDetailsModal] = useState(false);
   const [showScreeningConfirmModal, setShowScreeningConfirmModal] = useState(false);
+  const [showIpBlockModal, setShowIpBlockModal] = useState(false);
+  const [ipBlockMessage, setIpBlockMessage] = useState('');
+  const [checkingIpBlock, setCheckingIpBlock] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [currentPage, setCurrentPage] = useState<'screening' | 'contact'>('screening');
@@ -60,6 +63,10 @@ const Survey: React.FC = () => {
   // ----------------------
   // Modal closers
   // ----------------------
+  const handleCloseIpBlock = () => {
+    setShowIpBlockModal(false);
+  };
+
   const handleCloseCarrierFail = () => {
     setShowCarrierFailModal(false);
     setPhoneNumber('');
@@ -101,7 +108,6 @@ const Survey: React.FC = () => {
           return;
         }
       } catch (error) {
-        console.error('Failed to check enrollment status:', error);
         // On error, allow enrollment (fail open)
         setEnrollmentFull(false);
       } finally {
@@ -153,9 +159,7 @@ const Survey: React.FC = () => {
         return;
       }
       
-      console.log('Resending link for phone:', phoneNumber);
       const data = await api.sendSurveyInvitation(phoneNumber);
-      console.log('API response:', data);
       
       if (data.ok) {
         if (data.linkUrl) {
@@ -174,7 +178,6 @@ const Survey: React.FC = () => {
       }
       setUsedStage('success');
     } catch (err: any) {
-      console.error('Resend link error:', err);
       setResendHadLink(false);
       setUsedResendInfo('Server error: ' + (err.message || 'Failed to resend link'));
       setUsedStage('success');
@@ -209,6 +212,21 @@ const Survey: React.FC = () => {
         setShowSurveyFailModal(true);
         return;
       }
+      // IP block check: prevent duplicate signups from same IP within 1 week
+      try {
+        setCheckingIpBlock(true);
+        const data = await api.checkEligibilityIp();
+        if (!data.allowed) {
+          setIpBlockMessage(data.message || 'This IP address was recently used to complete signup. Please try again later or contact us.');
+          setShowIpBlockModal(true);
+          return;
+        }
+      } catch (err: any) {
+        setErrorMessage('Unable to verify. Please try again.');
+        return;
+      } finally {
+        setCheckingIpBlock(false);
+      }
       // Mark survey as completed
       setHasCompletedSurvey(true);
       setCurrentPage('contact');
@@ -238,8 +256,6 @@ const Survey: React.FC = () => {
           return;
         }
       } catch (error: any) {
-        // If validation fails, show error but allow to continue (fail open)
-        console.error('Phone validation error:', error);
         setErrorMessage('Unable to validate phone number. Please try again.');
         return;
       }
@@ -255,7 +271,6 @@ const Survey: React.FC = () => {
         }
       } catch (error: any) {
         // If check fails, continue with the flow
-        console.log('Verification check:', error.message);
       }
 
       // Show confirmation modal before proceeding
@@ -491,11 +506,12 @@ const Survey: React.FC = () => {
                   </button>
                   <button
                     onClick={handleNextStep}
+                    disabled={checkingIpBlock}
                     className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg 
                       hover:from-blue-700 hover:to-blue-800 transition-colors focus:outline-none focus:ring-2 
-                      focus:ring-blue-500 focus:ring-offset-2"
+                      focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    Next
+                    {checkingIpBlock ? 'Checking...' : 'Next'}
                   </button>
                 </div>
               </div>
@@ -854,6 +870,39 @@ const Survey: React.FC = () => {
                   hover:from-red-700 hover:to-red-800 transition-colors focus:outline-none focus:ring-2 
                   focus:ring-red-500 focus:ring-offset-2"
                 onClick={handleCloseSurveyFail}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IP Block Modal */}
+      {showIpBlockModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md transform transition-all">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 rounded-t-xl px-6 py-4">
+              <h3 className="text-xl font-bold text-white">Signup Limit</h3>
+            </div>
+            <div className="p-6">
+              <div className="bg-amber-50 rounded-lg p-4 mb-6">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-amber-800">{ipBlockMessage}</p>
+                  </div>
+                </div>
+              </div>
+              <button
+                className="w-full px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-lg
+                  hover:from-amber-700 hover:to-amber-800 transition-colors focus:outline-none focus:ring-2
+                  focus:ring-amber-500 focus:ring-offset-2"
+                onClick={handleCloseIpBlock}
               >
                 Close
               </button>

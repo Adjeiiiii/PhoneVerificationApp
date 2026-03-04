@@ -135,7 +135,6 @@ const PhoneVerification: React.FC = () => {
         showNotification('error', 'Failed to send verification code. Please try again.');
       }
     } catch (error: any) {
-      console.error('OTP start error:', error);
       setPhoneNumberError('Network error: Please check your connection and try again.');
       showNotification('error', error.message || 'Network error. Please try again.');
     } finally {
@@ -167,7 +166,6 @@ const PhoneVerification: React.FC = () => {
         showNotification('error', 'Failed to resend verification code');
       }
     } catch (error: any) {
-      console.error('OTP resend error:', error);
       showNotification('error', error.message || 'Failed to resend verification code');
     } finally {
       setIsLoading(false);
@@ -231,16 +229,16 @@ const PhoneVerification: React.FC = () => {
               setVerificationError(errorMessage);
               showNotification('error', errorMessage);
             } else {
-              // Actual error
-              setVerificationError(invitationData.error || invitationData.message || 'Could not retrieve survey link.');
-              showNotification('error', invitationData.message || 'Could not retrieve survey link. Please try again.');
+              // Actual error (e.g. sms_send_failed) - show backend message (includes friendly Twilio error text)
+              const msg = invitationData.message || invitationData.error || 'Could not retrieve survey link. Please try again or contact us at (240) 428-8442.';
+              setVerificationError(msg);
+              showNotification('error', msg);
             }
             setCodeDigits(Array(6).fill(''));
             const firstBox = document.getElementById('otp-0') as HTMLInputElement;
             if (firstBox) firstBox.focus();
           }
         } catch (invitationError: any) {
-          console.error('Survey invitation error:', invitationError);
           setVerificationError(`Error: ${invitationError.message}`);
           showNotification('error', 'Failed to get survey link. Please try again.');
           // Don't mark as verified if link assignment failed
@@ -264,7 +262,6 @@ const PhoneVerification: React.FC = () => {
         if (firstBox) firstBox.focus();
       }
     } catch (error: any) {
-      console.error('OTP check error:', error);
       setVerificationError(`Error: ${error.message}`);
       showNotification('error', error.message || 'Verification failed. Please try again.');
     } finally {
@@ -290,9 +287,7 @@ const PhoneVerification: React.FC = () => {
     setIsLoading(true);
     
     try {
-      console.log('Resending link for phone:', phoneNumber);
       const data = await api.sendSurveyInvitation(phoneNumber);
-      console.log('API response:', data);
       
       if (data.ok) {
         if (data.linkUrl) {
@@ -314,7 +309,6 @@ const PhoneVerification: React.FC = () => {
       }
       setShowUsedModal(false);
     } catch (err: any) {
-      console.error('Resend link error:', err);
       setResendHadLink(false);
       setResendResult('Server error: ' + (err.message || 'Failed to resend link'));
       showNotification('error', 'Failed to resend survey link');

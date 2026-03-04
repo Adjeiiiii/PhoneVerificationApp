@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,4 +43,11 @@ public interface ParticipantRepository extends JpaRepository<Participant, UUID> 
      */
     @Query("SELECT COUNT(DISTINCT si.participant.id) FROM SurveyInvitation si")
     long countEnrolledParticipants();
+
+    /**
+     * Find the most recent signup timestamp for an IP address.
+     * Used to enforce 1-week cooldown: block if this is within the last 7 days.
+     */
+    @Query("SELECT MAX(COALESCE(p.verifiedAt, p.createdAt)) FROM Participant p WHERE p.signupIp = :ip")
+    Optional<OffsetDateTime> findLatestSignupAtByIp(@Param("ip") String ip);
 }

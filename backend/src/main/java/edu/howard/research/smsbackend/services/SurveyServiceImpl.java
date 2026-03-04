@@ -46,12 +46,7 @@ public class SurveyServiceImpl implements SurveyService {
             // This check happens BEFORE creating the invitation, preventing race conditions
             if (enrollmentService.isEnrollmentFull()) {
                 log.info("Enrollment full - cannot assign survey link for phone: {}", phone);
-                return new AssignResult(
-                    false, 
-                    "enrollment_full",
-                    "Thank you for completing the verification process. Unfortunately, while you were completing the registration, we reached our maximum number of participants for this study. We appreciate your time and interest. If you have any questions, please contact us at (240) 428-8442.",
-                    null
-                );
+                return new AssignResult(false, "enrollment_full", null, null, null);
             }
             
             // 1) normalize & upsert/find participant
@@ -71,7 +66,7 @@ public class SurveyServiceImpl implements SurveyService {
             }
             if (p.getStatus() == ParticipantStatus.OPTED_OUT) {
                 log.warn("Opted-out participant {}; not sending.", e164);
-                return new AssignResult(false, "participant_error", null, null);
+                return new AssignResult(false, "participant_error", null, null, null);
             }
 
             // 2) claim link
@@ -80,7 +75,7 @@ public class SurveyServiceImpl implements SurveyService {
                             ? linkPoolRepository.claimAny()
                             : linkPoolRepository.claimAvailable(batchLabel);
             if (claim.isEmpty()) {
-                return new AssignResult(false, "no_links_available", null, null);
+                return new AssignResult(false, "no_links_available", null, null, null);
             }
             UUID linkId = claim.get().getLinkId();
             String linkUrl = claim.get().getLinkUrl();
@@ -122,19 +117,19 @@ public class SurveyServiceImpl implements SurveyService {
                         OffsetDateTime.now()
                 );
                 // Return the link that was actually sent (short link if available)
-                return new AssignResult(true, null, linkToSend, sid);
+                return new AssignResult(true, null, linkToSend, sid, null);
             } else {
                 String error = (String) send.get("error");
                 inv.setMessageStatus("failed");
                 inv.setErrorCode(error);
                 inv.setFailedAt(OffsetDateTime.now());
                 invitationRepository.save(inv);
-                // Return the link that was actually sent (short link if available)
-                return new AssignResult(false, "sms_send_failed", linkToSend, null);
+                log.warn("SMS send failed for {}: Twilio errorCode={}", e164, error);
+                return new AssignResult(false, "sms_send_failed", linkToSend, null, error);
             }
         } catch (Exception ex) {
             log.error("assignAndSendLink error: {}", ex.getMessage(), ex);
-            return new AssignResult(false, "participant_error", null, null);
+            return new AssignResult(false, "participant_error", null, null, null);
         }
     }
 

@@ -65,14 +65,6 @@ const handleLogout = () => {
 };
 
 const handleResponse = async (response: Response) => {
-  // Log all response details for debugging
-  console.log('Response received:', {
-    status: response.status,
-    statusText: response.statusText,
-    url: response.url,
-    ok: response.ok
-  });
-  
   // Check if response has content to parse
   const contentType = response.headers.get('content-type');
   const hasJsonContent = contentType && contentType.includes('application/json');
@@ -91,17 +83,8 @@ const handleResponse = async (response: Response) => {
   }
   
   if (!response.ok) {
-    console.error('API Error Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      url: response.url,
-      headers: Object.fromEntries(response.headers.entries()),
-      data: data
-    });
-    
     // Handle authentication errors - auto logout
     if (response.status === 401 || response.status === 403) {
-      console.warn('Authentication failed - logging out user');
       handleLogout();
       const error = new Error('Your session has expired. Please log in again.') as ApiError;
       error.status = response.status;
@@ -122,8 +105,6 @@ const handleResponse = async (response: Response) => {
       errorMessage = 'Server error. Please try again later.';
     }
     
-    console.error('Throwing error:', errorMessage, 'Status:', response.status);
-    
     const error = new Error(errorMessage) as ApiError;
     error.status = response.status;
     throw error;
@@ -142,13 +123,11 @@ export const api = {
       if (token) {
         // Check if token is expired before making the request
         if (isTokenExpired(token)) {
-          console.warn('Token expired - logging out user');
           handleLogout();
           throw new Error('Your session has expired. Please log in again.');
         }
         (headers as any)['Authorization'] = `Bearer ${token}`;
       } else {
-        // No token for admin endpoint - redirect to login
         handleLogout();
         throw new Error('Please log in to access this resource.');
       }
@@ -172,16 +151,11 @@ export const api = {
       if (token) {
         // Check if token is expired before making the request
         if (isTokenExpired(token)) {
-          console.warn('Token expired - logging out user');
           handleLogout();
           throw new Error('Your session has expired. Please log in again.');
         }
         (headers as any)['Authorization'] = `Bearer ${token}`;
-        console.log('POST request to:', endpoint);
-        console.log('Token present:', !!token);
-        console.log('Token (first 20 chars):', token?.substring(0, 20) + '...');
       } else {
-        // No token for admin endpoint - redirect to login
         handleLogout();
         throw new Error('Please log in to access this resource.');
       }
@@ -207,13 +181,11 @@ export const api = {
       if (token) {
         // Check if token is expired before making the request
         if (isTokenExpired(token)) {
-          console.warn('Token expired - logging out user');
           handleLogout();
           throw new Error('Your session has expired. Please log in again.');
         }
         (headers as any)['Authorization'] = `Bearer ${token}`;
       } else {
-        // No token for admin endpoint - redirect to login
         handleLogout();
         throw new Error('Please log in to access this resource.');
       }
@@ -236,7 +208,6 @@ export const api = {
       if (token) {
         // Check if token is expired before making the request
         if (isTokenExpired(token)) {
-          console.warn('Token expired - logging out user');
           handleLogout();
           throw new Error('Your session has expired. Please log in again.');
         }
@@ -452,6 +423,11 @@ export const api = {
 
   deleteUser: async (userId: string) => {
     return api.delete(`/api/admin/delete-user/${userId}`);
+  },
+
+  // Eligibility / IP block check (called when user clicks Next on eligibility screen)
+  checkEligibilityIp: async () => {
+    return api.post('/api/eligibility/check-ip', {});
   },
 
   // Enrollment Management

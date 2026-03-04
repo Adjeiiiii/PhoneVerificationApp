@@ -141,10 +141,6 @@ const AdminDBOps: React.FC = () => {
         const invitations = allInvitations || [];
         
         if (links.length > 0) {
-          console.log(`Fetched ${links.length} links and ${invitations.length} invitations`);
-          console.log('Raw invitations data (first 3):', JSON.stringify(invitations.slice(0, 3), null, 2));
-          console.log('Raw links data (first 3):', JSON.stringify(links.slice(0, 3), null, 2));
-          
           // Create a map of link ID to participant info from invitations
           // Try to match by link.id first, then fallback to linkUrl matching
           const linkToParticipant = new Map();
@@ -156,7 +152,6 @@ const AdminDBOps: React.FC = () => {
                 phone: inv.participant?.phone || null,
                 email: inv.participant?.email || null
               });
-              console.log(`Mapped invitation to link ID: ${linkId}`);
             }
             // Also create a map by linkUrl as fallback (denormalized field)
             if (inv.linkUrl) {
@@ -164,7 +159,6 @@ const AdminDBOps: React.FC = () => {
                 phone: inv.participant?.phone || null,
                 email: inv.participant?.email || null
               });
-              console.log(`Mapped invitation to link URL: ${inv.linkUrl}`);
             }
           });
           
@@ -177,14 +171,6 @@ const AdminDBOps: React.FC = () => {
               participant = linkToParticipant.get(`url:${link.linkUrl}`);
             }
             const isUsed = !!participant;
-            // Debug logging for used links
-            if (isUsed) {
-              console.log('Found used link:', {
-                linkId: link.id,
-                linkUrl: link.linkUrl,
-                participant: participant
-              });
-            }
             return {
               id: link.id,
               link: link.linkUrl, // Map linkUrl to link
@@ -195,10 +181,6 @@ const AdminDBOps: React.FC = () => {
             };
           });
           
-          // Debug: Log how many links are marked as used
-          const usedCount = convertedLinks.filter((l: LinkRecord) => l.used).length;
-          console.log(`Total links: ${convertedLinks.length}, Used links: ${usedCount}`);
-          console.log('Used links details:', convertedLinks.filter((l: LinkRecord) => l.used));
           setLinks(convertedLinks);
           
           // On first load, initialize lastSeenCount
@@ -211,7 +193,6 @@ const AdminDBOps: React.FC = () => {
         setIsInitialLoad(false);
       })
       .catch((err) => {
-        console.error('Error fetching links:', err);
         setActionMessage(err?.message || 'Failed to load links.');
         setLoading(false);
         setIsInitialLoad(false);
@@ -289,7 +270,6 @@ const AdminDBOps: React.FC = () => {
         }
       })
       .catch((err) => {
-        console.error('Update link error:', err);
         setActionMessage('Failed to update link: ' + err.message);
       });
   };
@@ -321,7 +301,7 @@ const AdminDBOps: React.FC = () => {
           alert(data.error || 'Cannot delete link');
         }
       })
-      .catch((err) => console.error(err))
+      .catch(() => {})
       .finally(() => {
         closeDeleteModal();
       });
@@ -329,10 +309,8 @@ const AdminDBOps: React.FC = () => {
 
   const handleCSVUpload = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log('Starting CSV upload...');
     const token = localStorage.getItem('adminToken');
     if (!token) {
-      console.error('No admin token found');
       return;
     }
 
@@ -355,7 +333,6 @@ const AdminDBOps: React.FC = () => {
     })
       .then((res) => res.json())
       .then((data) => {
-        console.log('CSV upload response:', data);
         if (data.success) {
           setCsvSuccessCount(data.inserted || 0);
           setShowCsvSuccessModal(true);
@@ -374,7 +351,6 @@ const AdminDBOps: React.FC = () => {
         }
       })
       .catch((err) => {
-        console.error('CSV upload error:', err);
         alert('Error uploading CSV: ' + err.message);
       });
   };
@@ -507,7 +483,6 @@ const AdminDBOps: React.FC = () => {
         setActionMessage(`Deleted ${successfulIds.length}, failed ${failed.length}. ${sampleError}${suffix}`);
       }
     } catch (err) {
-        console.error('Bulk delete error:', err);
       setActionMessage('Failed to delete links. Please try again.');
     }
   };

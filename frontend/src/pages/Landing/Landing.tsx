@@ -16,14 +16,9 @@ const Landing: React.FC = () => {
         setLoadingEnrollment(true);
         // Add timestamp to prevent caching
         const status = await api.getEnrollmentStatus();
-        console.log('Enrollment status:', status);
-        // Enrollment is blocked if it's full OR if enrollment is disabled
-        // Note: JSON uses 'full' and 'enrollmentActive' (not 'isFull' and 'isEnrollmentActive')
         const isBlocked = status.full || !status.enrollmentActive;
-        console.log('Enrollment blocked?', isBlocked, 'full:', status.full, 'enrollmentActive:', status.enrollmentActive);
         setEnrollmentFull(isBlocked);
       } catch (error) {
-        console.error('Failed to check enrollment status:', error);
         // On error, allow enrollment (fail open)
         setEnrollmentFull(false);
       } finally {
@@ -110,8 +105,15 @@ const Landing: React.FC = () => {
               </p>
               <div className="bg-blue-50 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold text-blue-900 mb-4">Study Leadership</h3>
-                <p className="text-blue-800">
-                  This study is led by researchers at Howard University, including Jae Eun Chung, PhD., Jiang Li, PhD., Meirong Lui, PhD., and Amy Quarkume, PhD.
+                <p className="text-gray-700">
+                  This study is led by researchers at Howard University, including{' '}
+                  <a href="https://profiles.howard.edu/jae-eun-chung" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">Jae Eun Chung, PhD.</a>
+                  ,{' '}
+                  <a href="https://profiles.howard.edu/jiang-li" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">Jiang Li, PhD.</a>
+                  ,{' '}
+                  <a href="https://profiles.howard.edu/meirong-liu" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">Meirong Lui, PhD.</a>
+                  , and{' '}
+                  <a href="https://profiles.howard.edu/amy-quarkume" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">Amy Quarkume, PhD.</a>
                 </p>
               </div>
             </div>

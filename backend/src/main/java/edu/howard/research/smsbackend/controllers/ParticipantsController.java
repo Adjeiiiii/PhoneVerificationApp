@@ -233,13 +233,23 @@ public class ParticipantsController {
                         "message", "Your phone number is verified. No survey link is available right now. Our study team has been notified and will assign one to you shortly."
                     ));
                     // Note: linkUrl is intentionally omitted - frontend checks for its presence
+                } else if ("sms_send_failed".equals(result.reason())) {
+                    // SMS failed (Twilio rejected) - include errorCode and user-friendly message
+                    String code = result.errorCode() != null ? result.errorCode() : "";
+                    String friendly = friendlySmsError(code);
+                    return ResponseEntity.ok(Map.of(
+                        "ok", false,
+                        "error", "sms_send_failed",
+                        "errorCode", code,
+                        "message", friendly
+                    ));
                 } else {
-                    // Actual error
-                return ResponseEntity.ok(Map.of(
-                    "ok", false,
+                    // Other errors
+                    return ResponseEntity.ok(Map.of(
+                        "ok", false,
                         "error", result.reason() != null ? result.reason() : "unknown_error",
-                        "message", "Failed to send survey link: " + (result.reason() != null ? result.reason() : "Unknown error")
-                ));
+                        "message", "Failed to send survey link. Please try again or contact us at (240) 428-8442 or ai@networks.howard.edu."
+                    ));
                 }
             }
         } catch (IllegalArgumentException e) {
@@ -254,5 +264,22 @@ public class ParticipantsController {
             // The global exception handler will catch it and return proper error response
             throw new RuntimeException("Failed to resend survey link: " + e.getMessage(), e);
         }
+    }
+
+    /** Map Twilio error codes to user-friendly messages. See https://www.twilio.com/docs/api/errors */
+    private static String friendlySmsError(String code) {
+        if (code == null || code.isBlank()) {
+            return "We couldn't send the survey link to this number. Please try again or contact us at (240) 428-8442 or ai@networks.howard.edu.";
+        }
+        return switch (code) {
+            case "21608" -> "This number isn't verified for test messaging. Please use a different number or contact us at (240) 428-8442 or ai@networks.howard.edu.";
+            case "21614" -> "This number can't receive text messages. Please use a mobile number that accepts SMS.";
+            case "30003", "30005" -> "We couldn't reach this number. Please check the number and try again, or contact us at (240) 428-8442 or ai@networks.howard.edu.";
+            case "30006" -> "This number doesn't accept text messages (e.g. landline or restricted). Please use a mobile number that receives SMS, or contact us at (240) 428-8442 or ai@networks.howard.edu.";
+            case "21211" -> "The phone number is invalid. Please check and try again.";
+            case "63016" -> "Too many attempts. Please try again in a few minutes.";
+            case "twilio_not_configured" -> "SMS is not configured. Please contact the study team at (240) 428-8442 or ai@networks.howard.edu.";
+            default -> "We couldn't send the survey link (error " + code + "). Please try again or contact us at (240) 428-8442 or ai@networks.howard.edu.";
+        };
     }
 }

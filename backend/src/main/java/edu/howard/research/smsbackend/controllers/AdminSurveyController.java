@@ -30,6 +30,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
+import org.springframework.orm.jpa.JpaObjectRetrievalFailureException;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -1023,6 +1025,30 @@ public class AdminSurveyController {
 
             return ResponseEntity.ok(response);
 
+        } catch (JpaObjectRetrievalFailureException | EntityNotFoundException e) {
+            // Orphaned invitation: invitation row exists but participant was already deleted (missing FK).
+            // Clean up invitation and related data without loading the participant.
+            if (e.getMessage() != null && e.getMessage().contains("Participant")) {
+                Optional<UUID> linkIdOpt = inviteRepo.findLinkIdByInvitationId(id);
+                if (linkIdOpt.isPresent()) {
+                    log.warn("Deleting orphaned invitation {} (participant missing): {}", id, e.getMessage());
+                    giftCardRepo.clearInvitationAndParticipantByInvitationId(id);
+                    linkIdOpt.ifPresent(linkId ->
+                        linkRepo.findById(linkId).ifPresent(link -> {
+                            link.setStatus(LinkStatus.AVAILABLE);
+                            linkRepo.save(link);
+                        }));
+                    inviteRepo.deleteById(id);
+                    return ResponseEntity.ok(Map.of(
+                        "success", true,
+                        "message", "Orphaned invitation removed successfully",
+                        "deletedId", id.toString()
+                    ));
+                }
+            }
+            log.error("Error deleting user {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Failed to delete user: " + (e.getMessage() != null ? e.getMessage() : "Unknown error occurred")));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.error("Data integrity violation while deleting user {}: {}", id, e.getMessage(), e);
             return ResponseEntity.badRequest()

@@ -25,6 +25,15 @@ public class SmsServiceImpl implements SmsService {
 
     @Override
     public Map<String, Object> send(String toE164, String body) {
+        if (messagingServiceSid == null || messagingServiceSid.isBlank()) {
+            log.warn("Twilio Messaging Service SID not configured - cannot send SMS");
+            return Map.of(
+                    "ok", false,
+                    "to", toE164,
+                    "body", body,
+                    "error", "twilio_not_configured"
+            );
+        }
         try {
             Message msg = Message
                     .creator(new PhoneNumber(toE164), (String) null, body)

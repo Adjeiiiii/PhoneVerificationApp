@@ -61,7 +61,6 @@ const AdminLogin: React.FC = () => {
       } else {
         setLoginError('Invalid credentials. Please try again.');
       }
-      console.error(err);
     }
   };
 

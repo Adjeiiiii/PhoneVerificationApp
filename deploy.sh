@@ -29,8 +29,11 @@ npm install --production=false  # Install dependencies if needed
 npm run build
 
 echo "📋 Copying frontend to web directory..."
-sudo cp -r dist/* /var/www/html/
-sudo chown -R www-data:www-data /var/www/html/
+# WEB_ROOT: change if your server uses a different path (e.g. /var/www/health.networks.howard.edu)
+WEB_ROOT="/var/www/html"
+sudo rm -rf "${WEB_ROOT}"/* 2>/dev/null || true   # Clear old files to avoid stale assets
+sudo cp -r dist/. "${WEB_ROOT}/"
+sudo chown -R www-data:www-data "${WEB_ROOT}"
 
 echo "✅ Checking backend status..."
 docker ps | grep sms-backend

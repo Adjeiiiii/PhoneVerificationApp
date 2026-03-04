@@ -172,7 +172,6 @@ const GiftCardManagement: React.FC = () => {
             setNextAvailableCard(null);
           }
         } catch (error) {
-          console.error('Error fetching next available card:', error);
           setNextAvailableCard(null);
         }
       } else {
@@ -330,23 +329,16 @@ const GiftCardManagement: React.FC = () => {
       const status = await api.getGiftCardPoolStatus();
       setPoolStatus(status);
     } catch (error) {
-      console.error('Error fetching pool status:', error);
     }
   };
 
   const fetchPoolData = async () => {
     try {
       const status = poolStatusFilter === 'ALL' ? null : poolStatusFilter;
-      console.log('Fetching pool data:', { status, poolPage, poolPageSize, poolSearch });
       const response = await api.getGiftCardsFromPool(status, poolPage, poolPageSize, poolSearch.trim() || undefined);
-      console.log('Pool data response:', response);
-      console.log('Response content:', response.content);
-      console.log('Response totalPages:', response.totalPages);
-      console.log('Response totalElements:', response.totalElements);
       setPoolCards(response.content || []);
       setPoolTotalPages(response.totalPages ?? 0);
     } catch (error) {
-      console.error('Error fetching pool cards:', error);
       setMessage({ type: 'error', text: `Failed to fetch pool cards: ${error instanceof Error ? error.message : 'Unknown error'}` });
     }
   };
@@ -356,7 +348,6 @@ const GiftCardManagement: React.FC = () => {
       const participants = await api.getEligibleParticipants();
       setEligibleParticipants(participants || []);
     } catch (error) {
-      console.error('Error fetching eligible participants:', error);
     }
   };
 
@@ -371,7 +362,6 @@ const GiftCardManagement: React.FC = () => {
       if (pageOverride !== undefined) setFailedPage(pageOverride);
       if (sizeOverride !== undefined) setFailedPageSize(sizeOverride);
     } catch (error) {
-      console.error('Error fetching failed gift cards:', error);
       setFailedGiftCards([]);
     }
   };
@@ -387,7 +377,6 @@ const GiftCardManagement: React.FC = () => {
       if (pageOverride !== undefined) setSentPage(pageOverride);
       if (sizeOverride !== undefined) setSentPageSize(sizeOverride);
     } catch (error) {
-      console.error('Error fetching sent gift cards:', error);
     }
   };
 
@@ -396,7 +385,6 @@ const GiftCardManagement: React.FC = () => {
       const response = await api.getUnsentGiftCards(0, 20);
       setUnsentGiftCards(response.content || []);
     } catch (error) {
-      console.error('Error fetching unsent gift cards:', error);
     }
   };
 
@@ -829,8 +817,6 @@ const GiftCardManagement: React.FC = () => {
   };
 
   const handleSendGiftCard = async () => {
-    console.log('Send gift card data:', sendData);
-    
     if (!sendData.participantId || !sendData.invitationId) {
       setMessage({ type: 'error', text: 'No participant selected' });
       return;
@@ -844,10 +830,6 @@ const GiftCardManagement: React.FC = () => {
 
     setLoading(true);
     try {
-      console.log('Sending gift card to participant:', sendData.participantId);
-      console.log('Gift card data:', sendData);
-      console.log('Invitation ID being sent:', sendData.invitationId);
-      
       // Only send required fields - backend will auto-select from pool
       const requestData = {
         invitationId: sendData.invitationId,
@@ -855,9 +837,7 @@ const GiftCardManagement: React.FC = () => {
         notes: sendData.notes || undefined
       };
       
-      const result = await api.sendGiftCard(sendData.participantId, requestData);
-      console.log('API call result:', result);
-      
+      await api.sendGiftCard(sendData.participantId, requestData);
       setMessage({ type: 'success', text: 'Gift card sent successfully!' });
       setShowSendModal(false);
       setSendData({
@@ -882,13 +862,6 @@ const GiftCardManagement: React.FC = () => {
       await fetchSentGiftCards();
       await fetchPoolData(); // Also refresh pool data since card status will change
     } catch (error: any) {
-      console.error('Send gift card error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        status: error.status,
-        response: error.response
-      });
-      
       let errorMessage = 'Failed to send gift card';
       if (error.message) {
         errorMessage = error.message;
@@ -911,9 +884,6 @@ const GiftCardManagement: React.FC = () => {
   const handleDeletePoolCard = async () => {
     if (!selectedItem) return;
 
-    console.log('Selected item for deletion:', selectedItem);
-    console.log('Selected item ID:', selectedItem.id, 'Type:', typeof selectedItem.id);
-
     // Validate that the ID is a valid UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(selectedItem.id)) {
@@ -925,7 +895,6 @@ const GiftCardManagement: React.FC = () => {
 
     setLoading(true);
     try {
-      console.log('Attempting to delete gift card with ID:', selectedItem.id);
       await api.deleteGiftCardFromPool(selectedItem.id);
       
       setMessage({ type: 'success', text: 'Gift card deleted successfully!' });
@@ -936,7 +905,6 @@ const GiftCardManagement: React.FC = () => {
       await fetchPoolStatus();
       await fetchPoolData();
     } catch (error: any) {
-      console.error('Delete error details:', error);
       setMessage({ type: 'error', text: error.message || 'Failed to delete gift card' });
     } finally {
       setLoading(false);
@@ -1005,9 +973,6 @@ const GiftCardManagement: React.FC = () => {
   const handleDeleteSentCard = async () => {
     if (!selectedItem) return;
 
-    console.log('Selected sent card for unsending:', selectedItem);
-    console.log('Selected sent card ID:', selectedItem.id, 'Type:', typeof selectedItem.id);
-
     // Validate that the ID is a valid UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(selectedItem.id)) {
@@ -1026,7 +991,6 @@ const GiftCardManagement: React.FC = () => {
 
     setLoading(true);
     try {
-      console.log('Attempting to unsend gift card with ID:', selectedItem.id);
       await api.unsendGiftCard(selectedItem.id);
       
       setMessage({ type: 'success', text: 'Gift card made available successfully!' });
@@ -1039,7 +1003,6 @@ const GiftCardManagement: React.FC = () => {
       await fetchSentGiftCards();
       await fetchUnsentGiftCards();
     } catch (error: any) {
-      console.error('Unsend gift card error details:', error);
       setMessage({ type: 'error', text: error.message || 'Failed to make gift card available' });
     } finally {
       setLoading(false);
@@ -1157,7 +1120,6 @@ const GiftCardManagement: React.FC = () => {
 
       setMessage({ type: 'success', text: `Exported ${allCards.length} gift card(s) to CSV` });
     } catch (error: any) {
-      console.error('Error exporting CSV:', error);
       setMessage({ type: 'error', text: error.message || 'Failed to export CSV' });
     } finally {
       setLoading(false);

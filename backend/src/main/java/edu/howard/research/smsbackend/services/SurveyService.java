@@ -39,7 +39,8 @@ public interface SurveyService {
     /**
      * Result for assignAndSendLink.
      *  - ok=true: linkUrl + messageSid populated
-     *  - ok=false: reason populated (e.g., "no_links_available", "sms_send_failed", "participant_error")
+     *  - ok=false: reason populated (e.g., "no_links_available", "sms_send_failed", "participant_error");
+     *    when reason is sms_send_failed, errorCode holds the Twilio error code (e.g. "21608", "30006").
      */
-    record AssignResult(boolean ok, String reason, String linkUrl, String messageSid) {}
+    record AssignResult(boolean ok, String reason, String linkUrl, String messageSid, String errorCode) {}
 }

@@ -13,6 +13,13 @@ import java.util.UUID;
 
 public interface SurveyInvitationRepository extends JpaRepository<SurveyInvitation, UUID> {
 
+    /**
+     * Get link_id for an invitation without loading the invitation entity (avoids loading missing participant).
+     * Used when cleaning up orphaned invitations whose participant was already deleted.
+     */
+    @Query(value = "SELECT link_id FROM survey_invitation WHERE id = :id", nativeQuery = true)
+    Optional<UUID> findLinkIdByInvitationId(@Param("id") UUID id);
+
     // ---- Admin filters ----
     Page<SurveyInvitation> findByMessageStatus(String status, Pageable pageable);
     Page<SurveyInvitation> findByParticipant_Phone(String phone, Pageable pageable);

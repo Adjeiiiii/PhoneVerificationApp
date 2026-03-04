@@ -5,6 +5,7 @@ import edu.howard.research.smsbackend.models.entities.GiftCardStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -108,4 +109,12 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, UUID> {
      * Find gift cards by pool ID
      */
     List<GiftCard> findByPoolId(UUID poolId);
+
+    /**
+     * Clear invitation and participant references for gift cards by invitation ID (native update).
+     * Used when deleting orphaned invitations without loading entities.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query(value = "UPDATE gift_card SET invitation_id = NULL, participant_id = NULL WHERE invitation_id = :invitationId", nativeQuery = true)
+    int clearInvitationAndParticipantByInvitationId(@Param("invitationId") UUID invitationId);
 }
