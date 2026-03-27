@@ -23,11 +23,14 @@ The backend is a Spring Boot application that serves as the core API for the How
 ### Core Functionality
 - **Phone Verification**: OTP-based verification using Twilio
 - **Survey Management**: Link pool management and distribution
-- **Participant Management**: User lifecycle and status tracking
-- **Gift Card System**: Reward distribution and tracking
-- **Admin Operations**: Administrative dashboard and controls
+- **Participant Management**: User lifecycle and status tracking; **`signup_ip`** recorded at verification for abuse controls
+- **Eligibility / IP cooldown**: Public check blocks repeat signups from the same IP within a **7-day** window (after a prior completed signup)
+- **Enrollment configuration**: Global open/close, caps, and **survey access** (toggle + password hash in DB, with env fallbacks)
+- **Scoped JWTs**: Short-lived tokens for **enrollment settings** (`X-Enrollment-Access-Token`) and **survey access** (`X-Survey-Access-Token`) alongside the main **admin** JWT
+- **Gift Card System**: Reward distribution and tracking; admin “sent” history includes **SENT**, **DELIVERED**, **REDEEMED**, **EXPIRED**
+- **Admin Operations**: Dashboard (invitations with optional **enrollment date range** filter at DB level), bulk complete-by-links, DB ops, gift cards, enrollment management
 - **Webhook Handling**: External service integration
-- **Secure Authentication**: Environment-based credential management with no hardcoded defaults
+- **Secure Authentication**: Secrets from environment (production); local compose may ship **placeholder defaults**—replace before real deployments
 
 ## Architecture
 
@@ -97,8 +100,11 @@ backend/
 │   │   └── TwilioConfig.java
 │   ├── controllers/               # REST API endpoints
 │   │   ├── AdminAuthController.java
+│   │   ├── AdminEnrollmentController.java
 │   │   ├── AdminGiftCardController.java
 │   │   ├── AdminSurveyController.java
+│   │   ├── EligibilityController.java
+│   │   ├── EnrollmentController.java
 │   │   ├── MessagesController.java
 │   │   ├── OtpController.java
 │   │   ├── ParticipantsController.java
@@ -114,6 +120,8 @@ backend/
 │   │   └── JwtAuthenticationFilter.java
 │   ├── services/                 # Business logic
 │   │   ├── EmailService.java
+│   │   ├── EnrollmentService.java
+│   │   ├── EnrollmentServiceImpl.java
 │   │   ├── GiftCardService.java
 │   │   ├── GiftCardServiceImpl.java
 │   │   ├── InvitationsService.java
@@ -181,9 +189,19 @@ sendgrid:
 admin:
   username: ${ADMIN_USERNAME}
   password: ${ADMIN_PASSWORD}
+  enrollment:
+    password: ${ENROLLMENT_SETTINGS_PASSWORD:}
+    password-hash: ${ENROLLMENT_SETTINGS_PASSWORD_HASH:}
+    access-token-expiration-ms: ${ENROLLMENT_ACCESS_TOKEN_EXPIRATION_MS:900000}
   jwt:
     secret: ${JWT_SECRET}
     expiration: ${JWT_EXPIRATION:3600000}
+
+app:
+  survey-access:
+    default-password: ${SURVEY_ACCESS_PASSWORD:}
+    default-password-hash: ${SURVEY_ACCESS_PASSWORD_HASH:}
+    token-expiration-ms: ${SURVEY_ACCESS_TOKEN_EXPIRATION_MS:1800000}
 ```
 
 ### Environment Variables
@@ -191,8 +209,10 @@ admin:
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`: Twilio credentials
 - `VERIFY_SERVICE_SID`, `MESSAGING_SERVICE_SID`: Twilio service IDs
 - `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_FROM_NAME`: Email service
-- `ADMIN_USERNAME`, `ADMIN_PASSWORD`: Admin credentials (REQUIRED - no defaults)
-- `JWT_SECRET`, `JWT_EXPIRATION`: JWT configuration (JWT_SECRET REQUIRED - no default)
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD`: Admin dashboard login
+- `JWT_SECRET`, `JWT_EXPIRATION`: Admin JWT signing and TTL
+- `ENROLLMENT_SETTINGS_PASSWORD` or `ENROLLMENT_SETTINGS_PASSWORD_HASH`: second factor for **Enrollment Settings** API; optional `ENROLLMENT_ACCESS_TOKEN_EXPIRATION_MS`
+- `SURVEY_ACCESS_PASSWORD` or `SURVEY_ACCESS_PASSWORD_HASH`: optional bootstrap/fallback for participant **survey access** password; `SURVEY_ACCESS_TOKEN_EXPIRATION_MS` for scoped token TTL
 
 ### Credential Management
 
@@ -216,11 +236,11 @@ This script generates:
 4. **Never commit .env file** to version control
 
 #### Security Benefits
-- **No hardcoded credentials** in source code
-- **No weak defaults** - application won't start without proper configuration
-- **Environment-specific credentials** for different deployments
-- **Easy credential rotation** by updating environment variables
-- **Secure random generation** using OpenSSL
+- **Real secrets stay out of git** (`.env` ignored; use `.env.example` as a template)
+- **Production** should use strong, unique values for all secrets
+- **Enrollment / survey access** passwords can be stored as **BCrypt hashes** in env or (for survey access) updated via admin UI and stored in `survey_enrollment_config`
+- **Scoped JWTs** limit blast radius compared to reusing the admin token for enrollment settings or public survey gates
+- **Secure random generation** via `generate-credentials.sh` where applicable
 
 ## Database Design
 
@@ -237,7 +257,8 @@ CREATE TABLE participant (
     consent_at TIMESTAMPTZ,
     status TEXT NOT NULL DEFAULT 'subscribed',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    verified_at TIMESTAMPTZ
+    verified_at TIMESTAMPTZ,
+    signup_ip VARCHAR(45)
 );
 ```
 
@@ -473,11 +494,13 @@ public enum LinkStatus {
 #### Gift Card Status
 ```java
 public enum GiftCardStatus {
-    PENDING,
-    SENT,
-    DELIVERED,
-    REDEEMED,
-    UNSENT
+             PENDING,    // Created but not sent yet
+             SENT,       // Handed off to provider
+             DELIVERED,  // Delivery confirmed (e.g. carrier / inbox)
+             REDEEMED,
+             EXPIRED,
+             FAILED,
+             UNSENT      // Revoked by admin
 }
 ```
 
@@ -591,7 +614,9 @@ All services implement interfaces for better testability and dependency injectio
 ### API Structure
 All APIs follow RESTful conventions with the base path `/api/`
 
-### Public Endpoints (No Authentication Required)
+### Public Endpoints (No Admin JWT)
+
+Most participant endpoints require a valid **`X-Survey-Access-Token`** when survey access is enabled (issued by `POST /api/enrollment/access-token`).
 
 #### OTP Endpoints
 ```
@@ -601,8 +626,20 @@ POST /api/otp/check
 
 #### Participant Endpoints
 ```
+POST /api/participants/validate-phone
 GET  /api/participants/check-verification/{phone}
 POST /api/participants/resend-survey-link
+```
+
+#### Eligibility
+```
+POST /api/eligibility/check-ip
+```
+
+#### Enrollment (public)
+```
+GET  /api/enrollment/status
+POST /api/enrollment/access-token
 ```
 
 #### System Webhooks
@@ -617,6 +654,13 @@ POST /api/system/webhooks/provider/sms-status
 ```
 POST /api/admin/login
 POST /api/admin/logout
+```
+
+#### Enrollment configuration (JWT admin + enrollment access token)
+```
+POST /api/admin/enrollment/access-token
+GET  /api/admin/enrollment/config      # Header: X-Enrollment-Access-Token
+PUT  /api/admin/enrollment/config      # Header: X-Enrollment-Access-Token
 ```
 
 #### Survey Management
@@ -636,11 +680,15 @@ POST   /api/admin/links/cleanup-orphaned
 #### Invitation Management
 ```
 GET  /api/admin/invitations
+     Optional query: status, phone, page, size, sort,
+     enrolledFrom, enrolledTo (LocalDate, UTC day bounds; DB filters on invitation.createdAt)
 POST /api/admin/invitations/send
 POST /api/admin/invitations/{id}/complete
 POST /api/admin/invitations/{id}/uncomplete
 POST /api/admin/invitations/bulk-complete
 POST /api/admin/invitations/bulk-uncomplete
+POST /api/admin/invitations/preview-links
+POST /api/admin/invitations/bulk-complete-by-links
 ```
 
 #### User Management
@@ -655,6 +703,7 @@ DELETE /api/admin/delete-user/{id}
 GET    /api/admin/gift-cards/eligible
 GET    /api/admin/gift-cards
 GET    /api/admin/gift-cards/sent
+           # Returns cards with status in SENT, DELIVERED, REDEEMED, EXPIRED (lifecycle after send)
 GET    /api/admin/gift-cards/{giftCardId}
 POST   /api/admin/gift-cards/send/{participantId}
 POST   /api/admin/gift-cards/{giftCardId}/resend
@@ -750,36 +799,19 @@ Common error codes:
 
 ### Authentication & Authorization
 
-#### JWT Implementation
-- **Token Generation**: Uses HMAC-SHA512 algorithm
-- **Expiration**: Configurable (default 1 hour)
-- **Secret**: Environment-configurable secret key
-- **Claims**: Username and role information
+#### JWT implementation
+- **Admin API token**: HMAC-SHA512; standard admin login; `Authorization: Bearer …`
+- **Scoped tokens** (same signing key, custom `scope` claim):  
+  - **`enrollment_access`** — carry as `X-Enrollment-Access-Token` for enrollment config GET/PUT  
+  - **`survey_access`** — carry as `X-Survey-Access-Token` on participant-facing endpoints when the survey gate is on
+- **Expiration**: Configurable per token type (admin vs scoped TTLs in config)
 
-#### Security Configuration
-```java
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) {
-        return http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(authz -> authz
-                .requestMatchers("/api/otp/**").permitAll()
-                .requestMatchers("/api/participants/**").permitAll()
-                .requestMatchers("/api/system/**").permitAll()
-                .requestMatchers("/api/admin/login").permitAll()
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .anyRequest().authenticated()
-            )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .build();
-    }
-}
-```
+#### Security configuration (conceptual; see `SecurityConfig.java` in repo)
+- **`/api/otp/**`**, **`/api/participants/**`**, **`/api/system/webhooks/**`**, **`/api/eligibility/**`**, **`/api/enrollment/status`**, **`/api/enrollment/access-token`**: public (no admin JWT)
+- **`/api/admin/login`**: public  
+- **`/api/admin/**`**: requires **ROLE_ADMIN** via JWT filter  
+- Enrollment config endpoints additionally validate **`X-Enrollment-Access-Token`** in controller logic  
+- Participant controllers / OTP / eligibility validate **`X-Survey-Access-Token`** when survey access is enabled
 
 #### JWT Filter
 ```java
@@ -825,17 +857,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 - **SQL Injection Prevention**: JPA/Hibernate parameterized queries
 - **XSS Protection**: Input sanitization and output encoding
 
-### Admin Credentials
-- **Username**: Environment-configurable (REQUIRED - no default)
-- **Password**: Environment-configurable (REQUIRED - no default)
-- **JWT Secret**: Environment-configurable 128-character secret (REQUIRED - no default)
-- **Token Expiration**: Environment-configurable (default: 1 hour)
+### Admin and gate credentials
+- **Admin username/password**: environment (`docker-compose` may default to **development** values—change for production)
+- **JWT secret**: must be strong in production (`JWT_SECRET`)
+- **Enrollment settings password**: env hash or plaintext (hashed at startup where implemented); unlocks scoped enrollment token
+- **Survey access**: primary password often set in **Enrollment Settings** (DB); env provides bootstrap/fallback
 
-#### Security Configuration Best Practices
-- **No Default Credentials**: Application will not start without proper environment variables
-- **Environment Variables**: All sensitive data stored in environment variables
-- **Credential Generation**: Use `generate-credentials.sh` script for secure random credentials
-- **Credential Rotation**: Easy to rotate credentials by updating environment variables
+#### Practices
+- Keep **`.env` out of git**; rotate credentials on compromise or staff changes
+- Prefer **hashes** in env for static gates when operational overhead is acceptable
+- Restrict **admin** and **enrollment** passwords to trusted operators
 
 ## External Integrations
 
@@ -1072,6 +1103,10 @@ CREATE TABLE survey_invitation (
 - Participant email and name fields
 - Verification timestamp
 - Gift card system tables
+
+#### Later versions (examples)
+- **V33**: `participant.signup_ip` for IP-based signup cooldown
+- **V34**: `survey_enrollment_config.survey_access_enabled`, `survey_access_password_hash` for participant survey gate
 
 #### V23: Gift Card System
 ```sql
@@ -1346,12 +1381,12 @@ logging:
 - **Version Control**: Git
 
 #### Security Requirements
-⚠️ **IMPORTANT SECURITY NOTICE**:
+⚠️ **IMPORTANT**:
 - **Never commit `.env` files** to version control
-- **Use secure, randomly generated credentials** for all environments
-- **Application will not start** without proper environment variables
-- **Rotate credentials regularly** in production environments
-- **Use different credentials** for development, staging, and production
+- **Use secure, randomly generated credentials** in staging and production
+- **Production** must set real Twilio/SendGrid/DB/JWT and operator passwords; local Docker may use template defaults—treat them as **non-secret dev convenience** only
+- **Rotate credentials** after incidents or personnel changes
+- **Isolate credentials** per environment (dev/staging/prod)
 
 ### Testing Strategy
 

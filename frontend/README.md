@@ -1,50 +1,33 @@
-# React + TypeScript + Vite
+# Frontend — Phone Verification App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite UI for Howard University’s phone verification and survey enrollment study.
 
-Currently, two official plugins are available:
+## Documentation
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **[Root README](../README.md)** — quick start, architecture, deployment
+- **[Frontend design](../design-docs/frontend-design.md)** — pages, routing, API usage, workflows
 
-## Expanding the ESLint configuration
+## Scripts
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install
+npm run dev      # dev server (see vite.config.ts for proxy/port)
+npm run build    # production build → dist/
+npm run lint
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+Configuration for API base URL in production is via **`VITE_API_BASE_URL`** when applicable.
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+The default Vite template ESLint notes below are **optional**; this project’s lint rules live in `eslint.config.js`.
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+---
+
+<details>
+<summary>Original Vite + React ESLint template notes (optional)</summary>
+
+If you are developing a production application, consider enabling type-aware lint rules:
+
+- Set top-level `parserOptions.project` to `['./tsconfig.node.json', './tsconfig.app.json']` and `tsconfigRootDir: import.meta.dirname`.
+- Consider `tseslint.configs.recommendedTypeChecked` or `strictTypeChecked`, and optionally `eslint-plugin-react`.
+
+</details>

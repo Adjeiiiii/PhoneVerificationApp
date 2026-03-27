@@ -1,81 +1,51 @@
 # Environment Setup
 
-This project uses environment variables for sensitive configuration. Follow these steps to set up your environment.
+Configuration is driven by **environment variables** (Docker Compose loads **`backend/.env`**). Never commit a real **`.env`** file.
 
-## 1. Create Environment File
+## 1. Files to copy
 
-Copy the example environment file and fill in your actual credentials:
-
-```bash
-cp docker-compose.example.yml docker-compose.yml
-```
-
-## 2. Create .env File
-
-Create a `.env` file in the `smsbackend` directory with your actual credentials:
+From the **`backend`** directory:
 
 ```bash
-# Database Configuration
-POSTGRES_DB=hu_research
-POSTGRES_USER=hu_app
-POSTGRES_PASSWORD=your_actual_password_here
-DB_HOST=db
-DB_PORT=5432
-DB_NAME=hu_research
-DB_USER=hu_app
-DB_PASSWORD=your_actual_password_here
-DB_SSL_MODE=disable
-DB_POOL_MAX=10
-
-# Twilio Configuration
-TWILIO_ACCOUNT_SID=your_twilio_account_sid
-TWILIO_AUTH_TOKEN=your_twilio_auth_token
-VERIFY_SERVICE_SID=your_verify_service_sid
-MESSAGING_SERVICE_SID=your_messaging_service_sid
-
-# SendGrid Configuration
-SENDGRID_API_KEY=your_sendgrid_api_key
-SENDGRID_FROM_EMAIL=your_email@domain.com
-SENDGRID_FROM_NAME=Your Team Name
-
-# Bit.ly Configuration (Optional - for URL shortening)
-# Get your API token from: https://bitly.com/a/settings/api
-# 1. Log in to your Bit.ly account
-# 2. Go to Settings > Developer settings > API
-# 3. Enter your password and click "Generate token"
-# 4. Copy the token and paste it below
-# Note: If not provided, links will be sent as-is (long URLs)
-# Free tier: 1,000 shortens/month
-BITLY_API_TOKEN=your_bitly_api_token_here
-
-# App Configuration
-SERVER_PORT=8080
-FLYWAY_ENABLED=true
-
-# Admin Configuration
-# Note: JWT_SECRET and ADMIN_PASSWORD will be auto-generated if not set
-# You can optionally set them manually for consistency across restarts
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=your_secure_password_here  # Optional: auto-generated if not set
-JWT_SECRET=your_jwt_secret_key_here_min_64_characters  # Optional: auto-generated if not set
-JWT_EXPIRATION=3600000
+cp .env.example .env
 ```
 
-## 3. Run the Application
+Optional: use `docker-compose.example.yml` as a reference; many teams use the repo’s `docker-compose.yml` with `.env` overrides.
+
+## 2. `.env` contents (checklist)
+
+Use **`backend/.env.example`** as the authoritative list of variable names. Typical groups:
+
+| Area | Variables (examples) |
+|------|----------------------|
+| Database | `POSTGRES_*`, `DB_*`, `DB_SSL_MODE`, `DB_POOL_MAX` |
+| Twilio | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `VERIFY_SERVICE_SID`, `MESSAGING_SERVICE_SID` |
+| SendGrid | `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_FROM_NAME` |
+| Admin JWT | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION` |
+| Enrollment settings gate | `ENROLLMENT_SETTINGS_PASSWORD` or `ENROLLMENT_SETTINGS_PASSWORD_HASH`, `ENROLLMENT_ACCESS_TOKEN_EXPIRATION_MS` |
+| Survey access (optional defaults) | `SURVEY_ACCESS_PASSWORD` or `SURVEY_ACCESS_PASSWORD_HASH`, `SURVEY_ACCESS_TOKEN_EXPIRATION_MS` |
+| Optional | `BITLY_API_TOKEN`, `SERVER_PORT`, `FLYWAY_ENABLED`, `SHORTLINK_BASE_URL` |
+
+Survey access can also be **managed in the database** via Enrollment Settings (toggle + password); env vars provide bootstrap/fallback behavior. See **`design-docs/backend-design.md`** and **`application.yml`**.
+
+## 3. Generate strong secrets (optional)
 
 ```bash
-docker-compose up --build
+cd backend
+./generate-credentials.sh
 ```
 
-## Security Notes
+Copy generated values into `.env` as appropriate.
 
-- **Never commit the `.env` file to version control**
-- The `.env` file is already added to `.gitignore`
-- Use different credentials for development and production
-- On production servers, create the `.env` file directly on the server
+## 4. Run
 
-## Production Deployment
+```bash
+cd backend
+docker compose up --build
+```
 
-1. Copy `docker-compose.example.yml` to `docker-compose.yml` on your server
-2. Create the `.env` file on the server with production credentials
-3. Run `docker-compose up -d` to start the services
+## Production
+
+- Create `.env` **on the server** with production values.  
+- Use long random **`JWT_SECRET`**, unique DB passwords, and real Twilio/SendGrid credentials.  
+- Prefer **hashed** enrollment/survey passwords where your ops model supports it (`*_PASSWORD_HASH`).

@@ -17,6 +17,13 @@ A full-stack application for phone number verification and survey link distribut
 - **Email Service**: SendGrid
 - **Containerization**: Docker + Docker Compose
 
+### Notable capabilities
+
+- **Participant flow**: Optional **survey access password** (set in Enrollment Settings; short-lived scoped JWT via `X-Survey-Access-Token` on public API calls).
+- **Signup IP cooldown**: After a completed signup, the same client IP is blocked from starting again for **7 days** (checked at eligibility; uses `signup_ip` on `participant`).
+- **Admin**: **Enrollment Settings** is gated by a separate password (scoped token in `X-Enrollment-Access-Token`). Dashboard **All Invitations** supports optional **enrollment date range** filters (`createdAt`, database-side). **Bulk Complete** accepts a file of survey links to mark completions.
+- **Gift cards**: Admin “sent” history includes cards in **SENT**, **DELIVERED**, **REDEEMED**, and **EXPIRED** (not only `SENT`).
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -105,7 +112,8 @@ npm run dev
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8080
-- **Admin Dashboard**: http://localhost:5173/admin-login
+- **Admin login**: http://localhost:5173/admin-login  
+- **Admin routes** (after login): `/admin-dashboard`, `/admin-ops`, `/admin-gift-cards`, `/admin-enrollment`
 
 ## 📁 Project Structure
 
@@ -142,9 +150,9 @@ PhoneVerificationApp/
 
 ### Environment Variables
 
-The application requires several environment variables. See `backend/ENVIRONMENT_SETUP.md` for detailed configuration instructions.
+The application uses environment variables for secrets and service configuration. See **`backend/ENVIRONMENT_SETUP.md`** and **`backend/.env.example`** for placeholders and guidance.
 
-⚠️ **Security Notice**: The application uses environment-based credential management with no hardcoded defaults. You must set secure credentials or the application will not start.
+⚠️ **Security**: Never commit **`backend/.env`**. In **production**, set strong values for database credentials, `JWT_SECRET`, Twilio/SendGrid keys, admin passwords, and enrollment/survey-access settings. Local `docker-compose.yml` may use **development defaults** for convenience—replace them for real deployments.
 
 ### Database
 
@@ -184,25 +192,25 @@ The application uses PostgreSQL with Flyway for database migrations. The databas
 - **Development**: Use local database and test credentials
 - **Production**: Use production database and real service credentials
 
-## 📚 API Documentation
+## 📚 API Documentation (summary)
 
-### Authentication Endpoints
+Public participant flows (many require **`X-Survey-Access-Token`** when survey access is enabled):
 
-- `POST /api/otp/start` - Start phone verification
-- `POST /api/otp/check` - Verify OTP code
-- `POST /api/admin/login` - Admin authentication
+- `POST /api/otp/start`, `POST /api/otp/check` — OTP via Twilio Verify  
+- `POST /api/participants/*` — validation, verification check, resend link (as implemented)  
+- `POST /api/eligibility/check-ip` — IP-based signup cooldown  
+- `GET /api/enrollment/status` — open/closed enrollment + survey-access flag  
+- `POST /api/enrollment/access-token` — issue scoped survey-access token (password body)
 
-### Survey Management
+Admin (**Bearer** admin JWT unless noted):
 
-- `POST /api/survey/assign` - Assign survey link to participant
-- `GET /api/survey/links` - List available survey links
-- `POST /api/survey/upload` - Upload new survey links
+- `POST /api/admin/login` — admin JWT  
+- `GET /api/admin/invitations` — optional `enrolledFrom` / `enrolledTo` (**LocalDate**) for DB filtering  
+- `POST /api/admin/invitations/preview-links`, `POST /api/admin/invitations/bulk-complete-by-links` — bulk complete by link URLs  
+- `GET/PUT /api/admin/enrollment/config` — requires **`X-Enrollment-Access-Token`** after unlock  
+- `POST /api/admin/enrollment/access-token` — enrollment-settings unlock (password body)
 
-### Participant Management
-
-- `GET /api/participants` - List participants
-- `GET /api/participants/{id}` - Get participant details
-- `PUT /api/participants/{id}` - Update participant
+See **`design-docs/backend-design.md`** for a fuller endpoint list and security details.
 
 ## 🛠️ Development
 
@@ -229,13 +237,12 @@ Migrations are automatically applied on startup. To create new migrations:
 
 ## 🔒 Security
 
-- **Environment-based credentials**: All sensitive data stored in environment variables
-- **No hardcoded defaults**: Application won't start without proper configuration
-- **Secure credential generation**: Use `generate-credentials.sh` for random credentials
-- **JWT tokens**: For admin authentication with configurable expiration
-- **CORS configured**: For frontend-backend communication
-- **Database credentials**: Not committed to version control
-- **Credential rotation**: Easy to rotate credentials by updating environment variables
+- **Secrets in environment** (and/or server-only `.env`), not in git  
+- **Admin JWT** for `/api/admin/**`; additional **scoped JWTs** for enrollment settings and survey access  
+- **BCrypt** for enrollment/survey access password material where configured  
+- **JWT verification** and configurable expiration  
+- **`.env` / `.env.example`**: real values stay local; use `generate-credentials.sh` where applicable  
+- **CORS** configured for the web app origin(s)
 
 ## 📝 Contributing
 

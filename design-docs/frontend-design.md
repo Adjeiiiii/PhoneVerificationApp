@@ -43,12 +43,13 @@ The frontend is built with modern web technologies, emphasizing user experience,
 │  React 19 + TypeScript + Vite + Tailwind CSS              │
 ├─────────────────────────────────────────────────────────────┤
 │  Public User Flow          │  Admin Management Interface   │
-│  ┌─────────────────────┐   │  ┌─────────────────────────┐  │
-│  │ Landing Page        │   │  │ Admin Login             │  │
-│  │ Eligibility Survey  │   │  │ Dashboard               │  │
-│  │ Phone Verification  │   │  │ Database Operations     │  │
-│  │ Survey Link         │   │  │ Gift Card Management    │  │
-│  └─────────────────────┘   │  └─────────────────────────┘  │
+│  ┌─────────────────────┐   │  ┌──────────────────────────┐ │
+│  │ Landing Page        │   │  │ Admin Login              │ │
+│  │ Eligibility Survey  │   │  │ Dashboard                │ │
+│  │ Phone Verification  │   │  │ Database Operations      │ │
+│  │ Survey Link         │   │  │ Gift Card Management     │ │
+│  └─────────────────────┘   │  │ Enrollment Settings      │ │
+│                            │  └──────────────────────────┘ │
 ├─────────────────────────────────────────────────────────────┤
 │  Shared Components & Utilities                             │
 │  ┌─────────────────────────────────────────────────────┐   │
@@ -119,6 +120,7 @@ frontend/
 ├── public/                     # Static assets
 ├── src/
 │   ├── components/            # Reusable components
+│   │   ├── AdminLayout.tsx
 │   │   └── AdminNavigation.tsx
 │   ├── contexts/              # React Context providers
 │   │   └── VerificationProvider.tsx
@@ -126,6 +128,7 @@ frontend/
 │   │   ├── AdminDashboard/
 │   │   ├── AdminDBOps/
 │   │   ├── AdminLogin/
+│   │   ├── EnrollmentManagement/
 │   │   ├── Footer/
 │   │   ├── GiftCardManagement/
 │   │   ├── Landing/
@@ -176,8 +179,10 @@ App
 │       │   └── Navbar + AdminNavigation
 │       ├── AdminDBOps
 │       │   └── Navbar + AdminNavigation
-│       └── GiftCardManagement
-│           └── Navbar + AdminNavigation
+│       ├── GiftCardManagement
+│       │   └── Navbar + AdminNavigation
+│       └── EnrollmentManagement
+│           └── AdminLayout + navigation
 └── Footer
 ```
 
@@ -209,7 +214,10 @@ function App() {
               <Route path="/admin-dashboard" element={
                 <ProtectedRoute><AdminDashboard /></ProtectedRoute>
               } />
-              {/* Additional admin routes... */}
+              <Route path="/admin-enrollment" element={
+                <ProtectedRoute><EnrollmentManagement /></ProtectedRoute>
+              } />
+              {/* admin-ops, admin-gift-cards, … */}
             </Routes>
           </div>
         </Router>
@@ -269,6 +277,8 @@ type VerificationContextType = {
 
 ##### Survey Page (`pages/Survey/Survey.tsx`)
 - **Purpose**: Eligibility screening and contact information collection
+- **Gating** (when enabled): **Survey access password** modal on load; obtains scoped token stored in **`sessionStorage`** and sent as **`X-Survey-Access-Token`** on public API calls; token is cleared when leaving the page so participants unlock again on each visit
+- **IP cooldown**: After eligibility answers, **`POST /api/eligibility/check-ip`** runs before contact info; blocked users see a message to contact the study team
 - **Multi-Step Process**:
   1. **Eligibility Screening**:
      - AI usage for health queries
@@ -312,11 +322,10 @@ type VerificationContextType = {
 - **Purpose**: Central admin control panel
 - **Key Features**:
   - Statistics overview
-  - Participant management
-  - Survey status tracking
-  - Bulk operations
-  - Search and filtering
-  - Pagination
+  - **All Invitations** tab with optional **enrollment date range** (apply/clear); filters at API/DB level on invitation `createdAt`
+  - **Bulk Complete** tab: upload `.txt`/`.csv` of survey URLs → preview → **`bulk-complete-by-links`**
+  - Participant management, bulk mark complete/uncomplete, per-row actions
+  - Search, filters, pagination
 
 - **Data Management**:
   - Real-time statistics
@@ -333,13 +342,17 @@ type VerificationContextType = {
   - Bulk operations
   - Usage statistics
 
+##### Enrollment Settings (`pages/EnrollmentManagement/EnrollmentManagement.tsx`)
+- **Purpose**: Study enrollment caps, open/close flags, and **survey access** toggle + password
+- **Access**: Route `/admin-enrollment` (admin JWT required); page-level **enrollment settings password** (`X-Enrollment-Access-Token` in **`sessionStorage`**, cleared when navigating away) required before loading or saving config
+
 ##### Gift Card Management (`pages/GiftCardManagement/GiftCardManagement.tsx`)
 - **Purpose**: Gift card distribution system
 - **Tabbed Interface**:
   1. **Gift Card Pool**: Available cards
   2. **Eligible Participants**: Survey completers
-  3. **Sent Gift Cards**: Distribution history
-  4. **Unsent History**: Revoked cards
+  3. **Sent Gift Cards**: Cards that have left **AVAILABLE** / pending—includes **SENT**, **DELIVERED**, **REDEEMED**, **EXPIRED** (full post-send lifecycle)
+  4. **Unsent History**: Revoked (`UNSENT`) and related history
 
 - **Key Features**:
   - Pool status dashboard
@@ -410,6 +423,7 @@ Each component manages its own local state for:
 /admin-dashboard    → Admin Dashboard
 /admin-ops          → Database Operations
 /admin-gift-cards   → Gift Card Management
+/admin-enrollment   → Enrollment Settings (password gate + config)
 ```
 
 ### Route Protection
@@ -456,9 +470,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 #### AdminNavigation Component (`components/AdminNavigation.tsx`)
 - **Purpose**: Admin section navigation
 - **Features**:
-  - Dashboard, Database Operations, Gift Cards
+  - Dashboard, Database Operations, Gift Cards, Enrollment Settings
   - Active state indication
   - Responsive button design
+
+#### AdminLayout (`components/AdminLayout.tsx`)
+- **Purpose**: Shared shell for admin pages with scrollable main content
 
 ---
 
@@ -555,16 +572,22 @@ const handleResponse = async (response: Response) => {
 ### API Endpoints
 
 #### Public Endpoints
-- `POST /api/otp/start` - Start phone verification
+- `POST /api/otp/start` - Start phone verification (includes **`X-Survey-Access-Token`** when gate on)
 - `POST /api/otp/check` - Verify OTP code
-- `POST /api/participants/resend-survey-link` - Resend survey link
+- `POST /api/participants/*` - Validation, verification check, resend link (same header when gate on)
+- `POST /api/eligibility/check-ip` - IP cooldown before contact step
+- `GET /api/enrollment/status` - Enrollment + survey-access flag
+- `POST /api/enrollment/access-token` - Unlock survey flow (password body)
 
 #### Admin Endpoints
 - `POST /api/admin/login` - Admin authentication
 - `GET /api/admin/stats` - Dashboard statistics
-- `GET /api/admin/invitations` - Participant invitations
+- `GET /api/admin/invitations` - Invitations (optional **`enrolledFrom`/`enrolledTo`** date filters)
+- `POST /api/admin/invitations/preview-links` / `bulk-complete-by-links` - Bulk complete by file
 - `GET /api/admin/links` - Survey link pool
 - `POST /api/admin/upload-links` - Upload survey links
+- `GET/PUT /api/admin/enrollment/config` - Enrollment settings (**`X-Enrollment-Access-Token`**)
+- `POST /api/admin/enrollment/access-token` - Unlock enrollment settings UI
 - `GET /api/admin/gift-cards/pool/status` - Gift card pool status
 - `POST /api/admin/gift-cards/send/{participantId}` - Send gift card
 
@@ -600,6 +623,8 @@ Redirected to Survey page
 ```
 Survey page loads
     ↓
+(Optional) Survey access password → POST /api/enrollment/access-token
+    ↓
 Step 1: Eligibility Questions
     ├── Used AI for health queries? (Yes/No)
     ├── Lives in US? (Yes/No)
@@ -607,8 +632,9 @@ Step 1: Eligibility Questions
     ↓
 Validation: All answers must be "Yes"
     ↓
-If eligible: Proceed to contact info
+If eligible: POST /api/eligibility/check-ip; if blocked → modal with contact guidance
 If not eligible: Show ineligibility modal
+If eligible and IP OK: Proceed to contact info
 ```
 
 **Validation Logic**:
@@ -852,18 +878,16 @@ select {
 
 ### Authentication & Authorization
 
-#### JWT Token Management
+#### JWT and scoped tokens
 ```typescript
-// Token storage and retrieval
+// Admin API
 const token = localStorage.getItem('adminToken');
+// Sent as Authorization: Bearer on /api/admin/* (except login)
 
-// Automatic token inclusion in admin requests
-if (endpoint.startsWith('/api/admin/')) {
-  const token = localStorage.getItem('adminToken');
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-}
+// Survey access (participant flow) — sessionStorage, cleared on survey unmount
+// X-Survey-Access-Token on OTP, participants, eligibility as implemented
+
+// Enrollment settings page — sessionStorage; X-Enrollment-Access-Token for config GET/PUT
 ```
 
 #### Token Validation
