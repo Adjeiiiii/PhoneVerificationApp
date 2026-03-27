@@ -39,6 +39,11 @@ public interface GiftCardRepository extends JpaRepository<GiftCard, UUID> {
     Page<GiftCard> findByStatusOrderByCreatedAtDesc(GiftCardStatus status, Pageable pageable);
 
     /**
+     * Find gift cards by multiple statuses.
+     */
+    Page<GiftCard> findByStatusInOrderByCreatedAtDesc(List<GiftCardStatus> statuses, Pageable pageable);
+
+    /**
      * Find gift cards by sent by admin
      */
     Page<GiftCard> findBySentByOrderByCreatedAtDesc(String sentBy, Pageable pageable);

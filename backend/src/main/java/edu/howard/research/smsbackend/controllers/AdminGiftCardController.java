@@ -79,7 +79,16 @@ public class AdminGiftCardController {
     ) {
         log.debug("Get sent gift cards request - page: {}, size: {}", page, size);
         Pageable pageable = PageRequest.of(page, size);
-        Page<GiftCardDto> giftCards = giftCardService.getGiftCardsByStatus(GiftCardStatus.SENT, pageable);
+        // "Sent" tab should include full sent lifecycle, not just raw SENT.
+        Page<GiftCardDto> giftCards = giftCardService.getGiftCardsByStatuses(
+                List.of(
+                        GiftCardStatus.SENT,
+                        GiftCardStatus.DELIVERED,
+                        GiftCardStatus.REDEEMED,
+                        GiftCardStatus.EXPIRED
+                ),
+                pageable
+        );
         return ResponseEntity.ok(giftCards);
     }
 

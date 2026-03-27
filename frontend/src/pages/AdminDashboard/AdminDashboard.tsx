@@ -1367,33 +1367,12 @@ const AdminDashboard: React.FC = () => {
             <div className="bg-white rounded-lg shadow flex-1 flex flex-col min-h-0 overflow-y-auto">
               <div className="p-6">
                 <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-800 mb-2">
-                        Bulk Mark Surveys as Completed
-                      </h2>
-                      <p className="text-sm text-gray-600">
-                        Upload a file containing survey links (one per line) to mark them as completed.
-                      </p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (window.confirm('This will create 15 test participants with survey invitations. Continue?')) {
-                          try {
-                            const result = await api.seedTestData();
-                            setBulkActionMessage(`Successfully created test data: ${result.participantsCreated} participants, ${result.invitationsCreated} invitations`);
-                            fetchStatsAndRecords(); // Refresh dashboard
-                            setTimeout(() => setBulkActionMessage(''), 5000);
-                          } catch (error: any) {
-                            setBulkActionMessage(`Error: ${error?.message || 'Failed to seed test data'}`);
-                          }
-                        }
-                      }}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-                    >
-                      Seed Test Data (15 entries)
-                    </button>
-                  </div>
+                  <h2 className="text-xl font-bold text-gray-800 mb-2">
+                    Bulk Mark Surveys as Completed
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Upload a file containing survey links (one per line) to mark them as completed.
+                  </p>
                 </div>
 
                 {/* File Upload Section - Only show when no links uploaded */}

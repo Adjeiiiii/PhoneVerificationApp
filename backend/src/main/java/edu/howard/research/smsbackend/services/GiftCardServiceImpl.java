@@ -404,6 +404,14 @@ public class GiftCardServiceImpl implements GiftCardService {
     }
 
     @Override
+    public Page<GiftCardDto> getGiftCardsByStatuses(List<GiftCardStatus> statuses, Pageable pageable) {
+        log.info("Getting gift cards with statuses: {}", statuses);
+        Page<GiftCard> giftCards = giftCardRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable);
+        log.info("Found {} gift cards for status set {}", giftCards.getTotalElements(), statuses);
+        return giftCards.map(this::convertToDto);
+    }
+
+    @Override
     public Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantPhone,
                                          String sentBy, OffsetDateTime fromDate, OffsetDateTime toDate, Pageable pageable) {
         log.info("Getting gift cards with filters: status={}, sentBy={}, fromDate={}, toDate={}", status, sentBy, fromDate, toDate);

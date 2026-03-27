@@ -47,6 +47,11 @@ public interface GiftCardService {
     Page<GiftCardDto> getGiftCardsByStatus(GiftCardStatus status, Pageable pageable);
 
     /**
+     * Get gift cards by multiple statuses.
+     */
+    Page<GiftCardDto> getGiftCardsByStatuses(List<GiftCardStatus> statuses, Pageable pageable);
+
+    /**
      * Get gift cards with filters
      */
     Page<GiftCardDto> getGiftCards(GiftCardStatus status, String participantPhone,

@@ -439,10 +439,6 @@ export const api = {
     return api.post('/api/admin/invitations/bulk-complete-by-links', { links });
   },
 
-  seedTestData: async () => {
-    return api.post('/api/admin/seed-test-data', {});
-  },
-
   checkGiftCardForInvitation: async (invitationId: string) => {
     return api.get(`/api/admin/gift-cards/check-invitation/${invitationId}`);
   },
