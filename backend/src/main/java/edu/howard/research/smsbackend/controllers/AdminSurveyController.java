@@ -30,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.orm.jpa.JpaObjectRetrievalFailureException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -327,6 +330,8 @@ public class AdminSurveyController {
     public ResponseEntity<?> listInvites(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String phone,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate enrolledFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate enrolledTo,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "25") @Min(1) int size,
             HttpServletRequest request
@@ -337,16 +342,34 @@ public class AdminSurveyController {
                     .body(Map.of("error", "Unauthorized access"));
         }
         Pageable pageable = PageRequest.of(page, Math.min(size, 200),
-                Sort.by(Sort.Direction.DESC, "id")); // safe fallback
+                Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        if (phone != null && !phone.isBlank()) {
-            String normalizedPhone = phoneNumberService.normalizeToE164(phone.trim());
-            return ResponseEntity.ok(inviteRepo.findByParticipant_Phone(normalizedPhone, pageable));
+        String normalizedPhone = (phone != null && !phone.isBlank())
+                ? phoneNumberService.normalizeToE164(phone.trim())
+                : null;
+        String normalizedStatus = (status != null && !status.isBlank())
+                ? status.trim().toLowerCase(Locale.ROOT)
+                : null;
+        LocalDate effectiveEnrolledTo = enrolledTo;
+        if (enrolledFrom != null && enrolledTo == null) {
+            // If only "from" is provided, default "to" to today.
+            effectiveEnrolledTo = LocalDate.now(ZoneOffset.UTC);
         }
-        if (status != null && !status.isBlank()) {
-            return ResponseEntity.ok(inviteRepo.findByMessageStatus(status.trim().toLowerCase(Locale.ROOT), pageable));
+        OffsetDateTime fromTs = (enrolledFrom != null)
+                ? enrolledFrom.atStartOfDay().atOffset(ZoneOffset.UTC)
+                : OffsetDateTime.parse("1970-01-01T00:00:00Z");
+        OffsetDateTime toExclusiveTs = (effectiveEnrolledTo != null)
+                ? effectiveEnrolledTo.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC)
+                : OffsetDateTime.parse("9999-12-31T23:59:59Z");
+
+        // Fast path: no filters at all, return all invitations.
+        if (normalizedPhone == null && normalizedStatus == null && enrolledFrom == null && enrolledTo == null) {
+            return ResponseEntity.ok(inviteRepo.findAll(pageable));
         }
-        return ResponseEntity.ok(inviteRepo.findAll(pageable));
+
+        return ResponseEntity.ok(
+                inviteRepo.findByFilters(normalizedStatus, normalizedPhone, fromTs, toExclusiveTs, pageable)
+        );
     }
 
     // ---------- List verified participants without invitations ----------

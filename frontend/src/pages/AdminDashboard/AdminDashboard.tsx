@@ -23,6 +23,7 @@ interface VerificationRecord {
   email_sent_at: string | null; // Email timestamp (placeholder for future)
   completed_at: string | null; // Survey completion timestamp
   signup_ip: string | null; // Client IP at signup (OTP check)
+  enrollment_at: string | null; // True enrollment date (invitation createdAt)
 }
 
 // LinkRecord interface removed - no longer used
@@ -43,6 +44,11 @@ const AdminDashboard: React.FC = () => {
   const [verifiedWithoutInvitations, setVerifiedWithoutInvitations] = useState<any[]>([]);
   const [availableLinks, setAvailableLinks] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [enrollmentDateFrom, setEnrollmentDateFrom] = useState('');
+  const [enrollmentDateTo, setEnrollmentDateTo] = useState('');
+  const [appliedEnrollmentDateFrom, setAppliedEnrollmentDateFrom] = useState('');
+  const [appliedEnrollmentDateTo, setAppliedEnrollmentDateTo] = useState('');
+  const [hasAppliedDateFilter, setHasAppliedDateFilter] = useState(false);
   // Enrollment widget removed from dashboard; keeping enrollment config on the dashboard is unnecessary
   // (Enrollment is managed via the sidebar "Enrollment Settings" page.)
   // const [enrollmentConfig, setEnrollmentConfig] = useState<any>(null);
@@ -180,6 +186,12 @@ const AdminDashboard: React.FC = () => {
       return;
     }
     
+    // Ensure dashboard starts unfiltered by date on initial load.
+    setEnrollmentDateFrom('');
+    setEnrollmentDateTo('');
+    setAppliedEnrollmentDateFrom('');
+    setAppliedEnrollmentDateTo('');
+    setHasAppliedDateFilter(false);
     fetchStatsAndRecords();
     
     // Set up periodic token expiration check (every 30 seconds)
@@ -214,6 +226,12 @@ const AdminDashboard: React.FC = () => {
     return () => clearInterval(tokenCheckInterval);
   }, [navigate]);
 
+  useEffect(() => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+    fetchStatsAndRecords();
+  }, [appliedEnrollmentDateFrom, appliedEnrollmentDateTo, hasAppliedDateFilter]);
+
 
   const fetchStatsAndRecords = () => {
     // 1) stats
@@ -225,8 +243,20 @@ const AdminDashboard: React.FC = () => {
         setStats({ totalVerifications: 0, usedLinks: 0, availableLinks: 0 });
       });
 
-    // 2) invitations (instead of verifications) - fetch with larger page size
-    api.get('/api/admin/invitations?page=0&size=1000')
+    // 2) invitations (true DB-level filtering by enrollment date range)
+    const invitationParams = new URLSearchParams({ page: '0', size: '1000' });
+    const isValidIsoDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (hasAppliedDateFilter) {
+      if (isValidIsoDate(appliedEnrollmentDateFrom)) {
+        invitationParams.set('enrolledFrom', appliedEnrollmentDateFrom);
+        // If "from" is set and "to" is blank, default to today's date.
+        invitationParams.set('enrolledTo', isValidIsoDate(appliedEnrollmentDateTo) ? appliedEnrollmentDateTo : todayIso);
+      } else if (isValidIsoDate(appliedEnrollmentDateTo)) {
+        invitationParams.set('enrolledTo', appliedEnrollmentDateTo);
+      }
+    }
+    api.get(`/api/admin/invitations?${invitationParams.toString()}`)
       .then((data: any) => {
         if (data && data.content) {
           // Convert backend format to frontend format
@@ -242,7 +272,8 @@ const AdminDashboard: React.FC = () => {
             email_status: invitation.participant?.email || 'N/A', // Show actual email address
             email_sent_at: invitation.sentAt || invitation.queuedAt || 'N/A',  // Show actual timestamp
             completed_at: invitation.completedAt || null, // Survey completion timestamp
-            signup_ip: invitation.participant?.signupIp || null
+            signup_ip: invitation.participant?.signupIp || null,
+            enrollment_at: invitation.createdAt || null
           }));
           setRecords(convertedRecords);
         } else {
@@ -302,6 +333,10 @@ const AdminDashboard: React.FC = () => {
 
     return matchesSearch;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, enrollmentDateFrom, enrollmentDateTo]);
 
   // Calculate pagination values
   const indexOfLastRecord = currentPage * recordsPerPage;
@@ -740,6 +775,50 @@ const AdminDashboard: React.FC = () => {
           {/* Records Table - Invitations Tab */}
           {activeTab === 'invitations' && (
           <div className="bg-white rounded-lg shadow overflow-hidden flex-1 flex flex-col min-h-0">
+            {/* Date Filter Bar */}
+            <div className="bg-gray-50 border-b border-gray-200 p-4 flex flex-wrap items-end gap-3 flex-shrink-0">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Enrollment Date From</label>
+                <input
+                  type="date"
+                  value={enrollmentDateFrom}
+                  onChange={(e) => setEnrollmentDateFrom(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Enrollment Date To</label>
+                <input
+                  type="date"
+                  value={enrollmentDateTo}
+                  onChange={(e) => setEnrollmentDateTo(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setAppliedEnrollmentDateFrom(enrollmentDateFrom);
+                  setAppliedEnrollmentDateTo(enrollmentDateTo);
+                  setHasAppliedDateFilter(!!enrollmentDateFrom || !!enrollmentDateTo);
+                }}
+                className="px-3 py-2 text-sm bg-blue-600 text-white border border-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Apply Filter
+              </button>
+              <button
+                onClick={() => {
+                  setEnrollmentDateFrom('');
+                  setEnrollmentDateTo('');
+                  setAppliedEnrollmentDateFrom('');
+                  setAppliedEnrollmentDateTo('');
+                  setHasAppliedDateFilter(false);
+                }}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Clear Dates
+              </button>
+            </div>
+
             {/* Bulk Actions Bar */}
             {currentRecords.length > 0 && (
             <div className="bg-gray-50 border-b border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4 flex-shrink-0">

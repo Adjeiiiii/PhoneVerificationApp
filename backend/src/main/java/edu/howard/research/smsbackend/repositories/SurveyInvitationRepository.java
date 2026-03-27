@@ -25,6 +25,21 @@ public interface SurveyInvitationRepository extends JpaRepository<SurveyInvitati
     Page<SurveyInvitation> findByParticipant_Phone(String phone, Pageable pageable);
     Page<SurveyInvitation> findByLink_BatchLabel(String batchLabel, Pageable pageable);
 
+    @Query("""
+      SELECT i FROM SurveyInvitation i
+      WHERE (:status IS NULL OR i.messageStatus = :status)
+        AND (:phone IS NULL OR i.participant.phone = :phone)
+        AND i.createdAt >= :enrolledFrom
+        AND i.createdAt < :enrolledToExclusive
+    """)
+    Page<SurveyInvitation> findByFilters(
+            @Param("status") String status,
+            @Param("phone") String phone,
+            @Param("enrolledFrom") OffsetDateTime enrolledFrom,
+            @Param("enrolledToExclusive") OffsetDateTime enrolledToExclusive,
+            Pageable pageable
+    );
+
     // ---- Lookups used by service ----
     Optional<SurveyInvitation> findTopByLinkUrlOrderByCreatedAtDesc(String linkUrl);
     Optional<SurveyInvitation> findByLinkId(UUID linkId);
