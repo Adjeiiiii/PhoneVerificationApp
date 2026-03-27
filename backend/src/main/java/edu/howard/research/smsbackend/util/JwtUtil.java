@@ -55,6 +55,19 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateScopedToken(String subject, String scope, long ttlMs) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + ttlMs);
+
+        return Jwts.builder()
+                .setSubject(subject)
+                .claim("scope", scope)
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(secretKey, SignatureAlgorithm.HS512)
+                .compact();
+    }
+
     public String getUsernameFromToken(String token) {
         Claims claims = Jwts.parser()
                 .verifyWith(secretKey)
@@ -88,6 +101,22 @@ public class JwtUtil {
         } catch (JwtException | IllegalArgumentException e) {
             log.warn("Error checking token expiration: {}", e.getMessage());
             return true;
+        }
+    }
+
+    public boolean validateScopedToken(String token, String requiredScope) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+
+            Object tokenScope = claims.get("scope");
+            return requiredScope.equals(tokenScope);
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("Invalid scoped JWT token: {}", e.getMessage());
+            return false;
         }
     }
 }

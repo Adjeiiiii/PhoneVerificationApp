@@ -14,6 +14,8 @@ interface ApiError extends Error {
   status?: number;
 }
 
+const ENROLLMENT_ACCESS_TOKEN_KEY = 'enrollmentAccessToken';
+
 // Phone number normalization utility
 export const normalizePhoneNumber = (phone: string): string => {
   // Remove all non-digits
@@ -58,10 +60,19 @@ const isTokenExpired = (token: string): boolean => {
 // Utility function to handle logout when authentication fails
 const handleLogout = () => {
   localStorage.removeItem('adminToken');
+  sessionStorage.removeItem(ENROLLMENT_ACCESS_TOKEN_KEY);
   // Only redirect if we're on an admin page
   if (window.location.pathname.startsWith('/admin')) {
     window.location.href = '/admin-login?expired=true';
   }
+};
+
+const getEnrollmentAccessTokenHeader = (): Record<string, string> => {
+  const token = sessionStorage.getItem(ENROLLMENT_ACCESS_TOKEN_KEY);
+  if (!token) {
+    throw new Error('Enrollment settings password is required.');
+  }
+  return { 'X-Enrollment-Access-Token': token };
 };
 
 const handleResponse = async (response: Response) => {
@@ -437,13 +448,21 @@ export const api = {
   },
 
   getEnrollmentConfig: async () => {
-    return api.get('/api/admin/enrollment/config');
+    return api.get('/api/admin/enrollment/config', {
+      headers: getEnrollmentAccessTokenHeader(),
+    });
   },
 
   updateEnrollmentConfig: async (maxParticipants: number | null, isEnrollmentActive: boolean | null) => {
     return api.put('/api/admin/enrollment/config', {
       maxParticipants,
       isEnrollmentActive
+    }, {
+      headers: getEnrollmentAccessTokenHeader(),
     });
+  },
+
+  requestEnrollmentAccessToken: async (password: string) => {
+    return api.post('/api/admin/enrollment/access-token', { password });
   },
 };

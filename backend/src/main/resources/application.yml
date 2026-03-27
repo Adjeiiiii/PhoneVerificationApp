@@ -62,6 +62,10 @@ bitly:
 admin:
   username: ${ADMIN_USERNAME}
   password: ${ADMIN_PASSWORD}
+  enrollment:
+    password: ${ENROLLMENT_SETTINGS_PASSWORD:}
+    password-hash: ${ENROLLMENT_SETTINGS_PASSWORD_HASH:}
+    access-token-expiration-ms: ${ENROLLMENT_ACCESS_TOKEN_EXPIRATION_MS:900000}
   jwt:
     secret: ${JWT_SECRET}
     expiration: ${JWT_EXPIRATION:3600000}  # 1 hour in milliseconds

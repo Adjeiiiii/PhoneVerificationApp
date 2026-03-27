@@ -3,16 +3,35 @@ import AdminLayout from '../../components/AdminLayout';
 import { api } from '../../utils/api';
 
 const EnrollmentManagement: React.FC = () => {
+  const ENROLLMENT_ACCESS_TOKEN_KEY = 'enrollmentAccessToken';
   const [config, setConfig] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+  const [accessGranted, setAccessGranted] = useState(false);
+  const [accessPassword, setAccessPassword] = useState('');
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [maxParticipants, setMaxParticipants] = useState<string>('');
   const [isEnrollmentActive, setIsEnrollmentActive] = useState(true);
 
   useEffect(() => {
-    fetchConfig();
+    // Require password every time this page/tab is opened.
+    sessionStorage.removeItem(ENROLLMENT_ACCESS_TOKEN_KEY);
+    setAccessGranted(false);
+    setLoading(false);
+
+    return () => {
+      // Clear scoped access token when leaving the page.
+      sessionStorage.removeItem(ENROLLMENT_ACCESS_TOKEN_KEY);
+    };
   }, []);
+
+  useEffect(() => {
+    if (accessGranted) {
+      fetchConfig();
+    }
+  }, [accessGranted]);
 
   // Auto-dismiss success messages after 5 seconds
   useEffect(() => {
@@ -27,14 +46,36 @@ const EnrollmentManagement: React.FC = () => {
   const fetchConfig = async () => {
     try {
       setLoading(true);
+      setAccessError(null);
       const data = await api.getEnrollmentConfig();
       setConfig(data);
       setMaxParticipants(data.maxParticipants?.toString() || '');
       setIsEnrollmentActive(data.isEnrollmentActive ?? true);
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to fetch enrollment configuration' });
+      const msg = error.message || 'Failed to fetch enrollment configuration';
+      setMessage({ type: 'error', text: msg });
+      if (msg.toLowerCase().includes('enrollment settings access token')) {
+        sessionStorage.removeItem(ENROLLMENT_ACCESS_TOKEN_KEY);
+        setAccessGranted(false);
+        setAccessError('Your enrollment settings access has expired. Enter the password again.');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUnlockAccess = async () => {
+    try {
+      setUnlocking(true);
+      setAccessError(null);
+      const response = await api.requestEnrollmentAccessToken(accessPassword.trim());
+      sessionStorage.setItem(ENROLLMENT_ACCESS_TOKEN_KEY, response.token);
+      setAccessPassword('');
+      setAccessGranted(true);
+    } catch (error: any) {
+      setAccessError(error.message || 'Invalid password. Please try again.');
+    } finally {
+      setUnlocking(false);
     }
   };
 
@@ -126,6 +167,43 @@ const EnrollmentManagement: React.FC = () => {
 
   return (
     <AdminLayout title="Enrollment Management" searchQuery="" onSearchChange={() => {}}>
+      {!accessGranted && (
+        <div className="p-6">
+          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-[0_10px_30px_rgba(2,6,23,0.08)] border border-slate-200/80 p-7">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 mb-2">Enrollment Settings Protected</h2>
+            <p className="text-sm leading-6 text-slate-600 mb-5">
+              Enter the enrollment settings password to access this page.
+            </p>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              value={accessPassword}
+              onChange={(e) => setAccessPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && accessPassword.trim() && !unlocking) {
+                  handleUnlockAccess();
+                }
+              }}
+              className="w-full px-4 py-3 text-slate-800 placeholder:text-slate-400 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-600 transition-colors duration-150"
+              placeholder="Enter enrollment settings password"
+              autoFocus
+            />
+            {accessError && (
+              <p className="mt-2 text-sm text-red-600">{accessError}</p>
+            )}
+            <button
+              onClick={handleUnlockAccess}
+              disabled={unlocking || !accessPassword.trim()}
+              className="mt-5 w-full px-4 py-3 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {unlocking ? 'Verifying...' : 'Unlock Enrollment Settings'}
+            </button>
+          </div>
+        </div>
+      )}
+      {accessGranted && (
           <div className="p-6 space-y-6">
             {/* Message Banner */}
             {message && (
@@ -319,6 +397,7 @@ const EnrollmentManagement: React.FC = () => {
             </div>
 
           </div>
+      )}
     </AdminLayout>
   );
 };
