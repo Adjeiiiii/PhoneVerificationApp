@@ -44,6 +44,10 @@ app:
     defaultRegion: US
   shortlink:
     baseUrl: ${SHORTLINK_BASE_URL:https://health.networks.howard.edu}
+  survey-access:
+    default-password: ${SURVEY_ACCESS_PASSWORD:}
+    default-password-hash: ${SURVEY_ACCESS_PASSWORD_HASH:}
+    token-expiration-ms: ${SURVEY_ACCESS_TOKEN_EXPIRATION_MS:1800000}
 
 twilio:
   accountSid: ${TWILIO_ACCOUNT_SID:}

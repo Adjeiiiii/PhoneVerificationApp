@@ -14,6 +14,8 @@ public class EnrollmentConfigDto {
     private UUID id;
     private Integer maxParticipants;
     private Boolean isEnrollmentActive;
+    private Boolean surveyAccessEnabled;
+    private Boolean hasSurveyAccessPassword;
     private String updatedBy;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

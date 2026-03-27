@@ -6,8 +6,11 @@ import edu.howard.research.smsbackend.models.dto.UpdateEnrollmentConfigRequest;
 import edu.howard.research.smsbackend.models.entities.SurveyEnrollmentConfig;
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyEnrollmentConfigRepository;
+import edu.howard.research.smsbackend.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +21,18 @@ public class EnrollmentServiceImpl implements EnrollmentService {
 
     private final SurveyEnrollmentConfigRepository configRepository;
     private final ParticipantRepository participantRepository;
+    private final JwtUtil jwtUtil;
+
+    @Value("${app.survey-access.default-password:}")
+    private String defaultSurveyAccessPassword;
+
+    @Value("${app.survey-access.default-password-hash:}")
+    private String defaultSurveyAccessPasswordHash;
+
+    @Value("${app.survey-access.token-expiration-ms:1800000}")
+    private long surveyAccessTokenExpirationMs;
+
+    private static final String SURVEY_ACCESS_SCOPE = "survey_access";
 
     @Override
     public EnrollmentStatusDto getEnrollmentStatus() {
@@ -48,6 +63,7 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             (int) currentCount,
             maxParticipants,
             isEnrollmentActive,
+            Boolean.TRUE.equals(config.getSurveyAccessEnabled()),
             remainingSpots,
             status
         );
@@ -78,6 +94,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
             config.getId(),
             maxParticipants,
             isEnrollmentActive,
+            Boolean.TRUE.equals(config.getSurveyAccessEnabled()),
+            config.getSurveyAccessPasswordHash() != null && !config.getSurveyAccessPasswordHash().isBlank(),
             config.getUpdatedBy(),
             config.getCreatedAt(),
             config.getUpdatedAt(),
@@ -110,6 +128,18 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         if (request.getIsEnrollmentActive() != null) {
             config.setIsEnrollmentActive(request.getIsEnrollmentActive());
         }
+
+        if (request.getSurveyAccessEnabled() != null) {
+            config.setSurveyAccessEnabled(request.getSurveyAccessEnabled());
+        }
+
+        if (request.getSurveyAccessPassword() != null && !request.getSurveyAccessPassword().isBlank()) {
+            String raw = request.getSurveyAccessPassword().trim();
+            if (raw.length() < 6) {
+                throw new IllegalArgumentException("Survey access password must be at least 6 characters.");
+            }
+            config.setSurveyAccessPasswordHash(BCrypt.hashpw(raw, BCrypt.gensalt()));
+        }
         
         config.setUpdatedBy(adminUsername);
         config = configRepository.save(config);
@@ -126,6 +156,45 @@ public class EnrollmentServiceImpl implements EnrollmentService {
         return status.isFull();
     }
 
+    @Override
+    public boolean isValidSurveyAccessToken(String token) {
+        SurveyEnrollmentConfig config = getOrCreateConfig();
+        if (!Boolean.TRUE.equals(config.getSurveyAccessEnabled())) {
+            return true;
+        }
+        return token != null && !token.isBlank() && jwtUtil.validateScopedToken(token, SURVEY_ACCESS_SCOPE);
+    }
+
+    @Override
+    public String createSurveyAccessToken(String password) {
+        SurveyEnrollmentConfig config = getOrCreateConfig();
+        if (!Boolean.TRUE.equals(config.getSurveyAccessEnabled())) {
+            return jwtUtil.generateScopedToken("public", SURVEY_ACCESS_SCOPE, surveyAccessTokenExpirationMs);
+        }
+
+        String effectiveHash = resolveSurveyAccessPasswordHash(config);
+        if (effectiveHash == null || effectiveHash.isBlank()) {
+            throw new IllegalStateException("Survey access password is not configured.");
+        }
+        if (password == null || password.isBlank() || !BCrypt.checkpw(password, effectiveHash)) {
+            throw new IllegalArgumentException("Invalid survey access password.");
+        }
+        return jwtUtil.generateScopedToken("public", SURVEY_ACCESS_SCOPE, surveyAccessTokenExpirationMs);
+    }
+
+    private String resolveSurveyAccessPasswordHash(SurveyEnrollmentConfig config) {
+        if (config.getSurveyAccessPasswordHash() != null && !config.getSurveyAccessPasswordHash().isBlank()) {
+            return config.getSurveyAccessPasswordHash();
+        }
+        if (defaultSurveyAccessPasswordHash != null && !defaultSurveyAccessPasswordHash.isBlank()) {
+            return defaultSurveyAccessPasswordHash;
+        }
+        if (defaultSurveyAccessPassword != null && !defaultSurveyAccessPassword.isBlank()) {
+            return BCrypt.hashpw(defaultSurveyAccessPassword, BCrypt.gensalt());
+        }
+        return null;
+    }
+
     private SurveyEnrollmentConfig getOrCreateConfig() {
         return configRepository.findFirstByOrderByCreatedAtAsc()
             .orElseGet(() -> {
@@ -133,6 +202,8 @@ public class EnrollmentServiceImpl implements EnrollmentService {
                 SurveyEnrollmentConfig defaultConfig = new SurveyEnrollmentConfig();
                 defaultConfig.setMaxParticipants(null); // unlimited
                 defaultConfig.setIsEnrollmentActive(true);
+                defaultConfig.setSurveyAccessEnabled(true);
+                defaultConfig.setSurveyAccessPasswordHash(resolveSurveyAccessPasswordHash(defaultConfig));
                 defaultConfig.setUpdatedBy("SYSTEM");
                 return configRepository.save(defaultConfig);
             });

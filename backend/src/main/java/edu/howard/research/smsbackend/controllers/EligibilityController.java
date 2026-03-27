@@ -1,11 +1,13 @@
 package edu.howard.research.smsbackend.controllers;
 
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
+import edu.howard.research.smsbackend.services.EnrollmentService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,15 +27,27 @@ import java.util.Optional;
 public class EligibilityController {
 
     private static final int BLOCK_DAYS = 7;
+    private static final String SURVEY_ACCESS_HEADER = "X-Survey-Access-Token";
 
     private final ParticipantRepository participantRepo;
+    private final EnrollmentService enrollmentService;
 
     /**
      * Check if the client's IP is allowed to proceed past eligibility (to contact/phone step).
      * Called when user clicks Next on the eligibility screen.
      */
     @PostMapping("/check-ip")
-    public ResponseEntity<Map<String, Object>> checkCanProceed(HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> checkCanProceed(
+            HttpServletRequest request,
+            @RequestHeader(value = SURVEY_ACCESS_HEADER, required = false) String surveyAccessToken
+    ) {
+        if (!enrollmentService.isValidSurveyAccessToken(surveyAccessToken)) {
+            return ResponseEntity.ok(Map.of(
+                    "allowed", false,
+                    "error", "survey_access_denied",
+                    "message", "Survey access password is required."
+            ));
+        }
         String clientIp = getClientIp(request);
 
         if (clientIp == null || clientIp.isBlank()) {

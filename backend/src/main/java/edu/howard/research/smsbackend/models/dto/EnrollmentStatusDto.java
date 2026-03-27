@@ -12,6 +12,7 @@ public class EnrollmentStatusDto {
     private int currentCount;
     private Integer maxParticipants; // null means unlimited
     private boolean isEnrollmentActive;
+    private boolean surveyAccessEnabled;
     private int remainingSpots; // -1 if unlimited
     private String status; // "OPEN", "FULL", "DISABLED", "UNLIMITED"
 }

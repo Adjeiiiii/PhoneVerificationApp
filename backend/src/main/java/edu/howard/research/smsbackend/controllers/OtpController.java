@@ -2,6 +2,7 @@ package edu.howard.research.smsbackend.controllers;
 
 import edu.howard.research.smsbackend.models.dto.OtpCheckRequest;
 import edu.howard.research.smsbackend.models.dto.OtpStartRequest;
+import edu.howard.research.smsbackend.services.EnrollmentService;
 import edu.howard.research.smsbackend.services.OtpService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -17,6 +18,8 @@ import java.util.Map;
 public class OtpController {
 
     private final OtpService otpService;
+    private final EnrollmentService enrollmentService;
+    private static final String SURVEY_ACCESS_HEADER = "X-Survey-Access-Token";
 
     /**
      * Start OTP flow for a phone number.
@@ -24,7 +27,17 @@ public class OtpController {
      * Does NOT create invitations or claim survey links.
      */
     @PostMapping("/start")
-    public ResponseEntity<Map<String, Object>> start(@Valid @RequestBody OtpStartRequest req) {
+    public ResponseEntity<Map<String, Object>> start(
+            @Valid @RequestBody OtpStartRequest req,
+            @RequestHeader(value = SURVEY_ACCESS_HEADER, required = false) String surveyAccessToken
+    ) {
+        if (!enrollmentService.isValidSurveyAccessToken(surveyAccessToken)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false,
+                    "error", "survey_access_denied",
+                    "message", "Survey access password is required."
+            ));
+        }
         Map<String, Object> result = otpService.start(req);
         return ResponseEntity.ok(result);
     }
@@ -36,7 +49,18 @@ public class OtpController {
      * Link assignment/resend is handled separately (e.g., /api/admin/invitations/send).
      */
     @PostMapping("/check")
-    public ResponseEntity<Map<String, Object>> check(@Valid @RequestBody OtpCheckRequest req, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> check(
+            @Valid @RequestBody OtpCheckRequest req,
+            HttpServletRequest request,
+            @RequestHeader(value = SURVEY_ACCESS_HEADER, required = false) String surveyAccessToken
+    ) {
+        if (!enrollmentService.isValidSurveyAccessToken(surveyAccessToken)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false,
+                    "error", "survey_access_denied",
+                    "message", "Survey access password is required."
+            ));
+        }
         String clientIp = getClientIp(request);
         Map<String, Object> result = otpService.check(req, clientIp);
         return ResponseEntity.ok(result);

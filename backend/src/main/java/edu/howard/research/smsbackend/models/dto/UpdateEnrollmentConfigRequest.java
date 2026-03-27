@@ -13,6 +13,10 @@ public class UpdateEnrollmentConfigRequest {
     private Integer maxParticipants; // null means unlimited
     
     private Boolean isEnrollmentActive;
+
+    private Boolean surveyAccessEnabled;
+
+    private String surveyAccessPassword;
 }
 
 

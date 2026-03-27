@@ -26,6 +26,12 @@ public class SurveyEnrollmentConfig {
     @Column(name = "is_enrollment_active", nullable = false)
     private Boolean isEnrollmentActive = true;
 
+    @Column(name = "survey_access_enabled", nullable = false)
+    private Boolean surveyAccessEnabled = true;
+
+    @Column(name = "survey_access_password_hash", columnDefinition = "text")
+    private String surveyAccessPasswordHash;
+
     @Column(name = "updated_by", length = 100)
     private String updatedBy;
 

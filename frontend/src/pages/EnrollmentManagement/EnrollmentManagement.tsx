@@ -14,6 +14,8 @@ const EnrollmentManagement: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [maxParticipants, setMaxParticipants] = useState<string>('');
   const [isEnrollmentActive, setIsEnrollmentActive] = useState(true);
+  const [surveyAccessEnabled, setSurveyAccessEnabled] = useState(true);
+  const [surveyAccessPassword, setSurveyAccessPassword] = useState('');
 
   useEffect(() => {
     // Require password every time this page/tab is opened.
@@ -51,6 +53,8 @@ const EnrollmentManagement: React.FC = () => {
       setConfig(data);
       setMaxParticipants(data.maxParticipants?.toString() || '');
       setIsEnrollmentActive(data.isEnrollmentActive ?? true);
+      setSurveyAccessEnabled(data.surveyAccessEnabled ?? true);
+      setSurveyAccessPassword('');
     } catch (error: any) {
       const msg = error.message || 'Failed to fetch enrollment configuration';
       setMessage({ type: 'error', text: msg });
@@ -99,8 +103,14 @@ const EnrollmentManagement: React.FC = () => {
         return;
       }
 
-      const updated = await api.updateEnrollmentConfig(maxParticipantsValue, isEnrollmentActive);
+      const updated = await api.updateEnrollmentConfig(
+        maxParticipantsValue,
+        isEnrollmentActive,
+        surveyAccessEnabled,
+        surveyAccessPassword.trim() || undefined
+      );
       setConfig(updated);
+      setSurveyAccessPassword('');
       setMessage({ type: 'success', text: 'Enrollment settings updated successfully!' });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to update enrollment configuration' });
@@ -351,6 +361,37 @@ const EnrollmentManagement: React.FC = () => {
                   <p className="mt-1 text-xs text-gray-500 ml-8">
                     When disabled, new participants cannot enroll even if under the limit.
                   </p>
+                </div>
+
+                {/* Survey Access Password Gate */}
+                <div className="pt-4 border-t border-gray-200 space-y-4">
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={surveyAccessEnabled}
+                      onChange={(e) => setSurveyAccessEnabled(e.target.checked)}
+                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Require Survey Access Password</span>
+                  </label>
+                  <p className="text-xs text-gray-500 ml-8">
+                    When enabled, participants must enter a study password before accessing survey enrollment.
+                  </p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Set New Survey Access Password
+                    </label>
+                    <input
+                      type="password"
+                      value={surveyAccessPassword}
+                      onChange={(e) => setSurveyAccessPassword(e.target.value)}
+                      placeholder={config?.hasSurveyAccessPassword ? 'Leave blank to keep current password' : 'Set survey access password'}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Minimum 6 characters. Leave blank to keep the existing password.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Quick Actions */}

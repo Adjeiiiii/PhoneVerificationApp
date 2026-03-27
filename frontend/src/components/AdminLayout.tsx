@@ -95,7 +95,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
           )}
 
           {/* Main Content */}
-          <main ref={contentRef} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <main ref={contentRef} className="flex-1 min-h-0 flex flex-col overflow-y-auto overflow-x-hidden">
             {children}
           </main>
         </div>

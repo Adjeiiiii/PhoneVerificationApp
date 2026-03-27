@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../../utils/api';
 
 const Survey: React.FC = () => {
+  const SURVEY_ACCESS_TOKEN_KEY = 'surveyAccessToken';
   const {
     setIsVerified,
     phoneNumber,
@@ -42,6 +43,11 @@ const Survey: React.FC = () => {
   const [phoneInput, setPhoneInput] = useState('');
   const [enrollmentFull, setEnrollmentFull] = useState(false);
   const [checkingEnrollment, setCheckingEnrollment] = useState(true);
+  const [surveyAccessEnabled, setSurveyAccessEnabled] = useState(true);
+  const [hasSurveyAccess, setHasSurveyAccess] = useState(false);
+  const [surveyAccessPassword, setSurveyAccessPassword] = useState('');
+  const [surveyAccessError, setSurveyAccessError] = useState('');
+  const [unlockingSurveyAccess, setUnlockingSurveyAccess] = useState(false);
 
   // ----------------------
   // Validation helpers
@@ -58,6 +64,17 @@ const Survey: React.FC = () => {
   const isPhoneNumberValid = (phone: string) => {
     const digits = phone.replace(/\D/g, '');
     return digits.length === 10;
+  };
+
+  const isJwtExpired = (token: string): boolean => {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return true;
+      const payload = JSON.parse(atob(parts[1]));
+      return !payload.exp || Date.now() >= payload.exp * 1000;
+    } catch {
+      return true;
+    }
   };
 
   // ----------------------
@@ -89,6 +106,21 @@ const Survey: React.FC = () => {
     setCurrentPage('screening');
   };
 
+  const handleUnlockSurveyAccess = async () => {
+    try {
+      setUnlockingSurveyAccess(true);
+      setSurveyAccessError('');
+      const response = await api.requestSurveyAccessToken(surveyAccessPassword.trim());
+      sessionStorage.setItem(SURVEY_ACCESS_TOKEN_KEY, response.token);
+      setHasSurveyAccess(true);
+      setSurveyAccessPassword('');
+    } catch (error: any) {
+      setSurveyAccessError(error.message || 'Invalid study access password.');
+    } finally {
+      setUnlockingSurveyAccess(false);
+    }
+  };
+
   // Check enrollment status on page load
   useEffect(() => {
     const checkEnrollment = async () => {
@@ -99,6 +131,21 @@ const Survey: React.FC = () => {
         // Note: JSON uses 'full' and 'enrollmentActive' (not 'isFull' and 'isEnrollmentActive')
         const isBlocked = status.full || !status.enrollmentActive;
         setEnrollmentFull(isBlocked);
+        const accessEnabled = status.surveyAccessEnabled !== false;
+        setSurveyAccessEnabled(accessEnabled);
+
+        if (!accessEnabled) {
+          setHasSurveyAccess(true);
+          sessionStorage.removeItem(SURVEY_ACCESS_TOKEN_KEY);
+        } else {
+          const existingToken = sessionStorage.getItem(SURVEY_ACCESS_TOKEN_KEY);
+          if (existingToken && !isJwtExpired(existingToken)) {
+            setHasSurveyAccess(true);
+          } else {
+            sessionStorage.removeItem(SURVEY_ACCESS_TOKEN_KEY);
+            setHasSurveyAccess(false);
+          }
+        }
         
         if (isBlocked) {
           // Redirect to home page after a brief delay to show message
@@ -217,11 +264,23 @@ const Survey: React.FC = () => {
         setCheckingIpBlock(true);
         const data = await api.checkEligibilityIp();
         if (!data.allowed) {
+          if (data.error === 'survey_access_denied') {
+            sessionStorage.removeItem(SURVEY_ACCESS_TOKEN_KEY);
+            setHasSurveyAccess(false);
+            setSurveyAccessError(data.message || 'Your survey access session expired. Please enter the password again.');
+            return;
+          }
           setIpBlockMessage(data.message || 'This IP address was recently used to complete signup. Please try again later or contact us.');
           setShowIpBlockModal(true);
           return;
         }
       } catch (err: any) {
+        if ((err.message || '').toLowerCase().includes('study access password')) {
+          sessionStorage.removeItem(SURVEY_ACCESS_TOKEN_KEY);
+          setHasSurveyAccess(false);
+          setSurveyAccessError('Your survey access session expired. Please enter the password again.');
+          return;
+        }
         setErrorMessage('Unable to verify. Please try again.');
         return;
       } finally {
@@ -363,6 +422,53 @@ const Survey: React.FC = () => {
                 Redirecting to home page...
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (surveyAccessEnabled && !hasSurveyAccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden w-full max-w-xl">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
+            <h2 className="text-2xl font-bold text-white text-center">Study Access Required</h2>
+            <p className="text-blue-100 text-center mt-1">
+              Enter the study access password provided by the research team.
+            </p>
+          </div>
+          <div className="p-6 md:p-8">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Study Access Password</label>
+            <input
+              type="password"
+              value={surveyAccessPassword}
+              onChange={(e) => setSurveyAccessPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && surveyAccessPassword.trim() && !unlockingSurveyAccess) {
+                  handleUnlockSurveyAccess();
+                }
+              }}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-600 transition-colors"
+              placeholder="Enter study access password"
+              autoFocus
+            />
+            {surveyAccessError && (
+              <p className="mt-2 text-sm text-red-600">{surveyAccessError}</p>
+            )}
+            <button
+              onClick={handleUnlockSurveyAccess}
+              disabled={unlockingSurveyAccess || !surveyAccessPassword.trim()}
+              className="mt-5 w-full px-4 py-3 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {unlockingSurveyAccess ? 'Verifying...' : 'Continue to Survey'}
+            </button>
+            <p className="text-sm text-gray-600 mt-4 text-center">
+              Need help? Contact us at{' '}
+              <a href="mailto:ai@networks.howard.edu" className="text-blue-700 hover:underline">ai@networks.howard.edu</a>
+              {' '}or{' '}
+              <a href="tel:+12404288442" className="text-blue-700 hover:underline">(240) 428-8442</a>.
+            </p>
           </div>
         </div>
       </div>

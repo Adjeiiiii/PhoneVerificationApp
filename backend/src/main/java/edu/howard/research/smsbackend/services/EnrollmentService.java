@@ -24,6 +24,16 @@ public interface EnrollmentService {
      * Check if enrollment is full (for internal use)
      */
     boolean isEnrollmentFull();
+
+    /**
+     * Validate a participant survey access token.
+     */
+    boolean isValidSurveyAccessToken(String token);
+
+    /**
+     * Issue a participant survey access token if password is valid.
+     */
+    String createSurveyAccessToken(String password);
 }
 
 

@@ -15,6 +15,7 @@ interface ApiError extends Error {
 }
 
 const ENROLLMENT_ACCESS_TOKEN_KEY = 'enrollmentAccessToken';
+const SURVEY_ACCESS_TOKEN_KEY = 'surveyAccessToken';
 
 // Phone number normalization utility
 export const normalizePhoneNumber = (phone: string): string => {
@@ -61,6 +62,7 @@ const isTokenExpired = (token: string): boolean => {
 const handleLogout = () => {
   localStorage.removeItem('adminToken');
   sessionStorage.removeItem(ENROLLMENT_ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(SURVEY_ACCESS_TOKEN_KEY);
   // Only redirect if we're on an admin page
   if (window.location.pathname.startsWith('/admin')) {
     window.location.href = '/admin-login?expired=true';
@@ -73,6 +75,14 @@ const getEnrollmentAccessTokenHeader = (): Record<string, string> => {
     throw new Error('Enrollment settings password is required.');
   }
   return { 'X-Enrollment-Access-Token': token };
+};
+
+const getSurveyAccessTokenHeader = (): Record<string, string> => {
+  const token = sessionStorage.getItem(SURVEY_ACCESS_TOKEN_KEY);
+  if (!token) {
+    throw new Error('Study access password is required.');
+  }
+  return { 'X-Survey-Access-Token': token };
 };
 
 const handleResponse = async (response: Response) => {
@@ -243,6 +253,8 @@ export const api = {
     return api.post('/api/otp/start', { 
       phone: normalizedPhone, 
       channel: 'sms' 
+    }, {
+      headers: getSurveyAccessTokenHeader(),
     });
   },
 
@@ -253,6 +265,8 @@ export const api = {
       code,
       email: email || null,
       name: name || null
+    }, {
+      headers: getSurveyAccessTokenHeader(),
     });
   },
 
@@ -262,6 +276,8 @@ export const api = {
     return api.post('/api/participants/resend-survey-link', { 
       phone: normalizedPhone, 
       body: 'resend' // Required field for SendSmsRequest
+    }, {
+      headers: getSurveyAccessTokenHeader(),
     });
   },
 
@@ -283,13 +299,17 @@ export const api = {
   // Check if participant is already verified
   checkVerification: async (phone: string) => {
     const normalizedPhone = normalizePhoneNumber(phone);
-    return api.get(`/api/participants/check-verification/${encodeURIComponent(normalizedPhone)}`);
+    return api.get(`/api/participants/check-verification/${encodeURIComponent(normalizedPhone)}`, {
+      headers: getSurveyAccessTokenHeader(),
+    });
   },
 
   // Validate phone number type (check for VOIP)
   validatePhone: async (phone: string) => {
     const normalizedPhone = normalizePhoneNumber(phone);
-    return api.post('/api/participants/validate-phone', { phone: normalizedPhone });
+    return api.post('/api/participants/validate-phone', { phone: normalizedPhone }, {
+      headers: getSurveyAccessTokenHeader(),
+    });
   },
 
   // Gift Card API calls
@@ -438,7 +458,13 @@ export const api = {
 
   // Eligibility / IP block check (called when user clicks Next on eligibility screen)
   checkEligibilityIp: async () => {
-    return api.post('/api/eligibility/check-ip', {});
+    return api.post('/api/eligibility/check-ip', {}, {
+      headers: getSurveyAccessTokenHeader(),
+    });
+  },
+
+  requestSurveyAccessToken: async (password: string) => {
+    return api.post('/api/enrollment/access-token', { password });
   },
 
   // Enrollment Management
@@ -453,10 +479,17 @@ export const api = {
     });
   },
 
-  updateEnrollmentConfig: async (maxParticipants: number | null, isEnrollmentActive: boolean | null) => {
+  updateEnrollmentConfig: async (
+    maxParticipants: number | null,
+    isEnrollmentActive: boolean | null,
+    surveyAccessEnabled?: boolean,
+    surveyAccessPassword?: string
+  ) => {
     return api.put('/api/admin/enrollment/config', {
       maxParticipants,
-      isEnrollmentActive
+      isEnrollmentActive,
+      surveyAccessEnabled,
+      surveyAccessPassword
     }, {
       headers: getEnrollmentAccessTokenHeader(),
     });

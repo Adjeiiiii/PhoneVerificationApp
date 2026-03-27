@@ -5,6 +5,7 @@ import edu.howard.research.smsbackend.models.entities.Participant;
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.services.EmailService;
+import edu.howard.research.smsbackend.services.EnrollmentService;
 import edu.howard.research.smsbackend.services.PhoneValidationService;
 import edu.howard.research.smsbackend.services.SmsService;
 import edu.howard.research.smsbackend.services.SurveyService;
@@ -32,13 +33,24 @@ public class ParticipantsController {
     private final SmsService smsService;
     private final EmailService emailService;
     private final PhoneValidationService phoneValidationService;
+    private final EnrollmentService enrollmentService;
+    private static final String SURVEY_ACCESS_HEADER = "X-Survey-Access-Token";
 
     /**
      * Validate phone number type (check if VOIP)
      * Returns validation result indicating if phone is acceptable (mobile/landline)
      */
     @PostMapping("/validate-phone")
-    public ResponseEntity<Map<String, Object>> validatePhone(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> validatePhone(
+            @RequestBody Map<String, String> request,
+            @RequestHeader(value = SURVEY_ACCESS_HEADER, required = false) String surveyAccessToken
+    ) {
+        if (!enrollmentService.isValidSurveyAccessToken(surveyAccessToken)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "valid", false,
+                    "error", "Survey access password is required."
+            ));
+        }
         try {
             String phone = request.get("phone");
             if (phone == null || phone.isEmpty()) {
@@ -77,7 +89,16 @@ public class ParticipantsController {
      * Returns participant info if verified, null if not
      */
     @GetMapping("/check-verification/{phone}")
-    public ResponseEntity<Map<String, Object>> checkVerification(@PathVariable String phone) {
+    public ResponseEntity<Map<String, Object>> checkVerification(
+            @PathVariable String phone,
+            @RequestHeader(value = SURVEY_ACCESS_HEADER, required = false) String surveyAccessToken
+    ) {
+        if (!enrollmentService.isValidSurveyAccessToken(surveyAccessToken)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "verified", false,
+                    "error", "Survey access password is required."
+            ));
+        }
         try {
             String normalizedPhone = phoneNumberService.normalizeToE164(phone);
             Optional<Participant> participantOpt = participantRepository.findByPhone(normalizedPhone);
@@ -117,7 +138,17 @@ public class ParticipantsController {
      */
     @PostMapping("/resend-survey-link")
     @Transactional(noRollbackFor = {IllegalArgumentException.class})
-    public ResponseEntity<Map<String, Object>> resendSurveyLink(@Valid @RequestBody SendSmsRequest request) {
+    public ResponseEntity<Map<String, Object>> resendSurveyLink(
+            @Valid @RequestBody SendSmsRequest request,
+            @RequestHeader(value = SURVEY_ACCESS_HEADER, required = false) String surveyAccessToken
+    ) {
+        if (!enrollmentService.isValidSurveyAccessToken(surveyAccessToken)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false,
+                    "error", "survey_access_denied",
+                    "message", "Survey access password is required."
+            ));
+        }
         try {
             String phone = phoneNumberService.normalizeToE164(request.getPhone());
             

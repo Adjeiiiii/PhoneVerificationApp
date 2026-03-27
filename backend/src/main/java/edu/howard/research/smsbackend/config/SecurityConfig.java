@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/messages/**").permitAll()
                 .requestMatchers("/api/system/**").permitAll()  // Webhook endpoints for Twilio
                 .requestMatchers("/api/enrollment/status").permitAll()  // Public enrollment status check
+                .requestMatchers("/api/enrollment/access-token").permitAll()  // Public survey password verification
                 .requestMatchers("/api/eligibility/**").permitAll()  // IP check when user clicks Next on eligibility screen
                 .requestMatchers("/api/admin/login").permitAll()
                 .requestMatchers("/api/admin/logout").permitAll()
