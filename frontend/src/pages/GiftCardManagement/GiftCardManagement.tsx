@@ -10,6 +10,7 @@ interface GiftCardPoolStatus {
   assignedCards: number;
   expiredCards: number;
   invalidCards: number;
+  otherCards: number;
   cardsByType: Record<string, number>;
   cardsByBatch: Record<string, number>;
 }
@@ -22,6 +23,8 @@ interface GiftCardPool {
   redemptionUrl: string;
   redemptionInstructions: string;
   status: string;
+  /** Free-text label when status is OTHER */
+  customStatusLabel?: string | null;
   batchLabel: string;
   uploadedBy: string;
   uploadedAt: string;
@@ -29,6 +32,14 @@ interface GiftCardPool {
   assignedAt: string | null;
   assignedToGiftCardId: string | null;
   notes?: string;
+}
+
+function formatPoolStatusDisplay(card: GiftCardPool): string {
+  if (card.status === 'OTHER') {
+    const label = card.customStatusLabel?.trim();
+    return label ? `Other: ${label}` : 'Other';
+  }
+  return card.status;
 }
 
 interface EligibleParticipant {
@@ -107,7 +118,7 @@ const GiftCardManagement: React.FC = () => {
   const [poolPage, setPoolPage] = useState<number>(0);
   const [poolPageSize, setPoolPageSize] = useState<number>(20);
   const [poolTotalPages, setPoolTotalPages] = useState<number>(0);
-  const [poolStatusFilter, setPoolStatusFilter] = useState<string>('ALL'); // 'ALL', 'AVAILABLE', 'ASSIGNED', 'EXPIRED', 'INVALID'
+  const [poolStatusFilter, setPoolStatusFilter] = useState<string>('ALL'); // 'ALL' or PoolStatus name
   
   // Eligible participants
   const [eligibleParticipants, setEligibleParticipants] = useState<EligibleParticipant[]>([]);
@@ -132,6 +143,8 @@ const GiftCardManagement: React.FC = () => {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCard, setEditingCard] = useState<GiftCardPool | null>(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusUpdateCard, setStatusUpdateCard] = useState<GiftCardPool | null>(null);
   const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
   
   // Actions menu for sent gift cards
@@ -521,6 +534,48 @@ const GiftCardManagement: React.FC = () => {
     setOpenActionMenuId(null);
   };
 
+  const handleOpenStatusUpdate = (card: GiftCardPool) => {
+    setStatusUpdateCard({ ...card });
+    setShowStatusModal(true);
+    setOpenActionMenuId(null);
+  };
+
+  const handleSaveStatusUpdate = async () => {
+    if (!statusUpdateCard) return;
+
+    if (statusUpdateCard.status === 'OTHER') {
+      const label = (statusUpdateCard.customStatusLabel || '').trim();
+      if (!label) {
+        setMessage({ type: 'error', text: 'When status is Other, enter a short description.' });
+        return;
+      }
+      if (label.length > 500) {
+        setMessage({ type: 'error', text: 'Description must be 500 characters or less.' });
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const body: { status: string; customStatusLabel?: string } = {
+        status: statusUpdateCard.status,
+      };
+      if (statusUpdateCard.status === 'OTHER') {
+        body.customStatusLabel = (statusUpdateCard.customStatusLabel || '').trim();
+      }
+      await api.updateGiftCardInPool(statusUpdateCard.id, body);
+      setMessage({ type: 'success', text: 'Pool status updated.' });
+      setShowStatusModal(false);
+      setStatusUpdateCard(null);
+      await fetchPoolData();
+      await fetchPoolStatus();
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to update status' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle save edited card
   const handleSaveEdit = async () => {
     if (!editingCard) return;
@@ -532,13 +587,33 @@ const GiftCardManagement: React.FC = () => {
       return;
     }
 
+    if (editingCard.status === 'OTHER') {
+      const label = (editingCard.customStatusLabel || '').trim();
+      if (!label) {
+        setMessage({ type: 'error', text: 'When status is Other, enter a short description.' });
+        return;
+      }
+      if (label.length > 500) {
+        setMessage({ type: 'error', text: 'Description must be 500 characters or less.' });
+        return;
+      }
+    }
+
     setLoading(true);
     try {
-      await api.updateGiftCardInPool(editingCard.id, editingCard.cardCode.toUpperCase());
+      const body: { cardCode: string; status: string; customStatusLabel?: string | null } = {
+        cardCode: editingCard.cardCode.trim().toUpperCase(),
+        status: editingCard.status,
+      };
+      if (editingCard.status === 'OTHER') {
+        body.customStatusLabel = (editingCard.customStatusLabel || '').trim();
+      }
+      await api.updateGiftCardInPool(editingCard.id, body);
       setMessage({ type: 'success', text: 'Gift card updated successfully!' });
       setShowEditModal(false);
       setEditingCard(null);
-      await fetchPoolData(); // Refresh the list
+      await fetchPoolData();
+      await fetchPoolStatus();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to update gift card' });
     } finally {
@@ -552,7 +627,7 @@ const GiftCardManagement: React.FC = () => {
       const button = buttonRefs.current[openActionMenuId];
       if (button) {
         const rect = button.getBoundingClientRect();
-        const menuHeight = 120; // Approximate height of the menu
+        const menuHeight = 200; // Approximate height of the menu (4 actions + divider)
         const menuWidth = 192; // w-48 = 192px
         const viewportHeight = window.innerHeight;
         const viewportWidth = window.innerWidth;
@@ -1137,7 +1212,7 @@ const GiftCardManagement: React.FC = () => {
 
         {/* Status Cards */}
         {poolStatus && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-2xl font-bold text-blue-600">{poolStatus.totalCards}</div>
               <div className="text-sm text-gray-600">Total Cards</div>
@@ -1153,6 +1228,14 @@ const GiftCardManagement: React.FC = () => {
             <div className="bg-white rounded-lg shadow p-6">
               <div className="text-2xl font-bold text-red-600">{poolStatus.expiredCards}</div>
               <div className="text-sm text-gray-600">Expired</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="text-2xl font-bold text-rose-600">{poolStatus.invalidCards}</div>
+              <div className="text-sm text-gray-600">Invalid</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="text-2xl font-bold text-purple-600">{poolStatus.otherCards ?? 0}</div>
+              <div className="text-sm text-gray-600">Other</div>
             </div>
           </div>
         )}
@@ -1286,6 +1369,7 @@ const GiftCardManagement: React.FC = () => {
                           <option value="ASSIGNED">Assigned</option>
                           <option value="EXPIRED">Expired</option>
                           <option value="INVALID">Invalid</option>
+                          <option value="OTHER">Other</option>
                         </select>
                         <svg className="pointer-events-none w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -1404,15 +1488,18 @@ const GiftCardManagement: React.FC = () => {
                                   }
                                 </code>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-6 py-4 whitespace-nowrap max-w-xs">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                               card.status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
                               card.status === 'ASSIGNED' ? 'bg-yellow-100 text-yellow-800' :
                               card.status === 'EXPIRED' ? 'bg-orange-100 text-orange-800' :
                               card.status === 'INVALID' ? 'bg-red-100 text-red-800' :
+                              card.status === 'OTHER' ? 'bg-purple-100 text-purple-800' :
                               'bg-gray-100 text-gray-800'
                             }`}>
-                              {card.status}
+                              <span className="truncate max-w-[14rem]" title={formatPoolStatusDisplay(card)}>
+                                {formatPoolStatusDisplay(card)}
+                              </span>
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1475,6 +1562,39 @@ const GiftCardManagement: React.FC = () => {
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                         </svg>
                                         <span>Edit</span>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          if (card.status !== 'ASSIGNED') {
+                                            handleOpenStatusUpdate(card);
+                                          }
+                                        }}
+                                        disabled={card.status === 'ASSIGNED'}
+                                        className={`w-full px-4 py-2 text-left text-sm flex items-center space-x-2 ${
+                                          card.status === 'ASSIGNED'
+                                            ? 'text-gray-400 cursor-not-allowed'
+                                            : 'text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                        title={
+                                          card.status === 'ASSIGNED'
+                                            ? 'Cannot change status for assigned gift cards'
+                                            : ''
+                                        }
+                                      >
+                                        <svg
+                                          className={`w-4 h-4 ${card.status === 'ASSIGNED' ? 'text-gray-400' : 'text-gray-500'}`}
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                                          />
+                                        </svg>
+                                        <span>Update Status</span>
                                       </button>
                                       <hr className="my-1 border-gray-200" />
                                       <button
@@ -3371,6 +3491,141 @@ const GiftCardManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Update pool status (from row menu) */}
+      {showStatusModal && statusUpdateCard && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-auto">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Update Status</h3>
+                    <p className="text-sm text-gray-500">
+                      <code className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+                        {statusUpdateCard.cardCode.length > 10
+                          ? `${statusUpdateCard.cardCode.substring(0, 4)}-••••••-${statusUpdateCard.cardCode.substring(statusUpdateCard.cardCode.length - 4)}`
+                          : statusUpdateCard.cardCode}
+                      </code>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowStatusModal(false);
+                    setStatusUpdateCard(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  type="button"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <div className="flex items-center space-x-2">
+                  <select
+                    value={statusUpdateCard.status}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setStatusUpdateCard({
+                        ...statusUpdateCard,
+                        status: v,
+                        customStatusLabel: v === 'OTHER' ? (statusUpdateCard.customStatusLabel ?? '') : '',
+                      });
+                    }}
+                    className="flex-1 min-w-0 h-10 box-border rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="AVAILABLE">Available</option>
+                    <option value="EXPIRED">Expired</option>
+                    <option value="INVALID">Invalid</option>
+                    <option value="OTHER">Other (custom label)</option>
+                  </select>
+                  <span
+                    className="flex h-10 shrink-0 items-center justify-center px-3 opacity-0 pointer-events-none select-none"
+                    aria-hidden
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              {statusUpdateCard.status === 'OTHER' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Custom description
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={statusUpdateCard.customStatusLabel || ''}
+                      onChange={(e) =>
+                        setStatusUpdateCard({
+                          ...statusUpdateCard,
+                          customStatusLabel: e.target.value,
+                        })
+                      }
+                      placeholder="e.g. Pending vendor confirmation"
+                      maxLength={500}
+                      className="flex-1 min-w-0 h-10 box-border rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <span
+                      className="flex h-10 shrink-0 items-center justify-center px-3 opacity-0 pointer-events-none select-none"
+                      aria-hidden
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">Required when status is Other. Max 500 characters.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setStatusUpdateCard(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStatusUpdate}
+                disabled={
+                  loading ||
+                  (statusUpdateCard.status === 'OTHER' &&
+                    !(statusUpdateCard.customStatusLabel || '').trim())
+                }
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Gift Card Modal */}
       {showEditModal && editingCard && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[55]">
@@ -3438,18 +3693,66 @@ const GiftCardManagement: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Status */}
+                {/* Status — same control row width as Card Code / Redemption URL (flex + icon column) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Status
                   </label>
-                  <span className={`inline-flex px-3 py-1.5 text-sm font-semibold rounded-full ${
-                    editingCard.status === 'AVAILABLE' ? 'bg-green-100 text-green-800' :
-                    editingCard.status === 'ASSIGNED' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {editingCard.status}
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <select
+                      value={editingCard.status}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEditingCard({
+                          ...editingCard,
+                          status: v,
+                          customStatusLabel: v === 'OTHER' ? (editingCard.customStatusLabel ?? '') : '',
+                        });
+                      }}
+                      className="flex-1 min-w-0 h-10 box-border rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="AVAILABLE">Available</option>
+                      <option value="EXPIRED">Expired</option>
+                      <option value="INVALID">Invalid</option>
+                      <option value="OTHER">Other (custom label)</option>
+                    </select>
+                    <span
+                      className="flex h-10 shrink-0 items-center justify-center px-3 opacity-0 pointer-events-none select-none"
+                      aria-hidden
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </span>
+                  </div>
+                  {editingCard.status === 'OTHER' && (
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Custom description
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={editingCard.customStatusLabel || ''}
+                          onChange={(e) =>
+                            setEditingCard({ ...editingCard, customStatusLabel: e.target.value })
+                          }
+                          placeholder="e.g. Pending vendor confirmation"
+                          maxLength={500}
+                          className="flex-1 min-w-0 h-10 box-border rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <span
+                          className="flex h-10 shrink-0 items-center justify-center px-3 opacity-0 pointer-events-none select-none"
+                          aria-hidden
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">Required when status is Other. Max 500 characters.</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Redemption URL */}
@@ -3462,13 +3765,13 @@ const GiftCardManagement: React.FC = () => {
                       type="text"
                       value={editingCard.redemptionUrl || 'https://www.amazon.com/gc/redeem'}
                       readOnly
-                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600"
+                      className="flex-1 min-w-0 h-10 box-border rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-600"
                     />
                     <a
                       href={editingCard.redemptionUrl || 'https://www.amazon.com/gc/redeem'}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                      className="flex h-10 shrink-0 items-center justify-center px-3 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
                       title="Open redemption URL"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3520,7 +3823,11 @@ const GiftCardManagement: React.FC = () => {
                   </button>
                   <button
                     onClick={handleSaveEdit}
-                    disabled={loading || !editingCard.cardCode}
+                    disabled={
+                      loading ||
+                      !editingCard.cardCode.trim() ||
+                      (editingCard.status === 'OTHER' && !(editingCard.customStatusLabel || '').trim())
+                    }
                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
                   >
                     {loading ? (

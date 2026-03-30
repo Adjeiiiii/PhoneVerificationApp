@@ -92,14 +92,14 @@ public interface GiftCardPoolRepository extends JpaRepository<GiftCardPool, UUID
      * Mark gift card as assigned
      */
     @Modifying
-    @Query("UPDATE GiftCardPool gcp SET gcp.status = 'ASSIGNED', gcp.assignedAt = CURRENT_TIMESTAMP, gcp.assignedToGiftCardId = :giftCardId WHERE gcp.id = :poolId")
+    @Query("UPDATE GiftCardPool gcp SET gcp.status = 'ASSIGNED', gcp.assignedAt = CURRENT_TIMESTAMP, gcp.assignedToGiftCardId = :giftCardId, gcp.customStatusLabel = null WHERE gcp.id = :poolId")
     int markAssigned(@Param("poolId") UUID poolId, @Param("giftCardId") UUID giftCardId);
 
     /**
      * Mark gift card as expired
      */
     @Modifying
-    @Query("UPDATE GiftCardPool gcp SET gcp.status = 'EXPIRED' WHERE gcp.id = :poolId")
+    @Query("UPDATE GiftCardPool gcp SET gcp.status = 'EXPIRED', gcp.customStatusLabel = null WHERE gcp.id = :poolId")
     int markExpired(@Param("poolId") UUID poolId);
 
     /**

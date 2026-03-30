@@ -19,10 +19,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin/gift-cards")
@@ -235,7 +237,8 @@ public class AdminGiftCardController {
                 log.warn("Invalid status parameter: {}", status, e);
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("ok", false);
-                errorResponse.put("error", "Invalid status parameter: " + status + ". Valid values are: AVAILABLE, ASSIGNED, EXPIRED, INVALID");
+                errorResponse.put("error", "Invalid status parameter: " + status + ". Valid values are: "
+                        + Arrays.stream(PoolStatus.values()).map(PoolStatus::name).collect(Collectors.joining(", ")));
                 errorResponse.put("status", HttpStatus.BAD_REQUEST.value());
                 return ResponseEntity.badRequest().body(errorResponse);
             }

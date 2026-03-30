@@ -15,6 +15,7 @@ public class PoolStatusDto {
     private long assignedCards;
     private long expiredCards;
     private long invalidCards;
+    private long otherCards;
     private Map<String, Long> cardsByType;
     private Map<String, Long> cardsByBatch;
 }

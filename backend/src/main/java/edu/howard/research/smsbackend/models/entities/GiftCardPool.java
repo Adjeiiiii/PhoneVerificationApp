@@ -48,6 +48,10 @@ public class GiftCardPool {
     @Column(name = "status", nullable = false, length = 32)
     private PoolStatus status = PoolStatus.AVAILABLE;
 
+    /** Free-text label when status is OTHER; must be null for other statuses. */
+    @Column(name = "custom_status_label", length = 500)
+    private String customStatusLabel;
+
     @Column(name = "batch_label", length = 100)
     private String batchLabel;
 
@@ -88,6 +92,9 @@ public class GiftCardPool {
 
     public PoolStatus getStatus() { return status; }
     public void setStatus(PoolStatus status) { this.status = status; }
+
+    public String getCustomStatusLabel() { return customStatusLabel; }
+    public void setCustomStatusLabel(String customStatusLabel) { this.customStatusLabel = customStatusLabel; }
 
     public String getBatchLabel() { return batchLabel; }
     public void setBatchLabel(String batchLabel) { this.batchLabel = batchLabel; }

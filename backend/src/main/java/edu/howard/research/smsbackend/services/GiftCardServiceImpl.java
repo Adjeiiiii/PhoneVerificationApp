@@ -309,6 +309,7 @@ public class GiftCardServiceImpl implements GiftCardService {
             if (giftCard.getPoolId() != null) {
                 giftCardPoolRepository.findById(giftCard.getPoolId()).ifPresent(availableCard -> {
                     availableCard.setStatus(PoolStatus.AVAILABLE);
+                    availableCard.setCustomStatusLabel(null);
                     availableCard.setAssignedAt(null);
                     availableCard.setAssignedToGiftCardId(null);
                     giftCardPoolRepository.save(availableCard);
@@ -626,6 +627,7 @@ public class GiftCardServiceImpl implements GiftCardService {
         long assignedCards = giftCardPoolRepository.countByStatus(PoolStatus.ASSIGNED);
         long expiredCards = giftCardPoolRepository.countByStatus(PoolStatus.EXPIRED);
         long invalidCards = giftCardPoolRepository.countByStatus(PoolStatus.INVALID);
+        long otherCards = giftCardPoolRepository.countByStatus(PoolStatus.OTHER);
 
         // Get cards by type
         Map<String, Long> cardsByType = new HashMap<>();
@@ -633,7 +635,7 @@ public class GiftCardServiceImpl implements GiftCardService {
             cardsByType.put(type.name(), giftCardPoolRepository.countAvailableByTypeAndValue(type, BigDecimal.ZERO));
         }
 
-        return new PoolStatusDto(totalCards, availableCards, assignedCards, expiredCards, invalidCards, 
+        return new PoolStatusDto(totalCards, availableCards, assignedCards, expiredCards, invalidCards, otherCards,
                 cardsByType, new HashMap<>());
     }
 
@@ -684,12 +686,23 @@ public class GiftCardServiceImpl implements GiftCardService {
     public GiftCardPoolDto updateGiftCardInPool(UUID poolId, UpdateGiftCardRequest request, String adminUsername) {
         GiftCardPool poolCard = giftCardPoolRepository.findById(poolId)
                 .orElseThrow(() -> new NotFoundException("Gift card not found in pool: " + poolId));
-        
-        // Check if code is being changed and if new code already exists
-        if (request.getCardCode() != null && !request.getCardCode().trim().isEmpty()) {
+
+        if (poolCard.getStatus() == PoolStatus.ASSIGNED) {
+            throw new IllegalStateException("Cannot edit an assigned pool card.");
+        }
+
+        boolean codeUpdate = request.getCardCode() != null && !request.getCardCode().trim().isEmpty();
+        boolean statusUpdate = request.getStatus() != null;
+
+        if (!codeUpdate && !statusUpdate) {
+            throw new IllegalArgumentException("Provide a card code update and/or a status change.");
+        }
+
+        if (codeUpdate) {
             String newCode = request.getCardCode().trim().toUpperCase();
-            
-            // If code is different, check for duplicates
+            if (!newCode.matches("^[A-Z0-9]{4}-[A-Z0-9]{6}-[A-Z0-9]{4}$")) {
+                throw new IllegalArgumentException("Card code must be in format XXXX-XXXXXX-XXXX");
+            }
             if (!newCode.equals(poolCard.getCardCode())) {
                 if (giftCardPoolRepository.existsByCardCode(newCode)) {
                     throw new IllegalArgumentException("Gift card code already exists: " + newCode);
@@ -697,7 +710,28 @@ public class GiftCardServiceImpl implements GiftCardService {
                 poolCard.setCardCode(newCode);
             }
         }
-        
+
+        if (statusUpdate) {
+            PoolStatus newStatus = request.getStatus();
+            if (newStatus == PoolStatus.ASSIGNED) {
+                throw new IllegalArgumentException("Cannot set pool status to ASSIGNED manually.");
+            }
+            if (newStatus == PoolStatus.OTHER) {
+                String label = request.getCustomStatusLabel() == null ? "" : request.getCustomStatusLabel().trim();
+                if (label.isEmpty()) {
+                    throw new IllegalArgumentException("When status is Other, enter a short description.");
+                }
+                if (label.length() > 500) {
+                    throw new IllegalArgumentException("Custom status description must be 500 characters or less.");
+                }
+                poolCard.setStatus(PoolStatus.OTHER);
+                poolCard.setCustomStatusLabel(label);
+            } else {
+                poolCard.setStatus(newStatus);
+                poolCard.setCustomStatusLabel(null);
+            }
+        }
+
         giftCardPoolRepository.save(poolCard);
         return convertPoolToDto(poolCard);
     }
@@ -744,6 +778,7 @@ public class GiftCardServiceImpl implements GiftCardService {
         if (giftCard.getPoolId() != null) {
             giftCardPoolRepository.findById(giftCard.getPoolId()).ifPresent(poolCard -> {
                 poolCard.setStatus(PoolStatus.AVAILABLE);
+                poolCard.setCustomStatusLabel(null);
                 poolCard.setAssignedAt(null);
                 poolCard.setAssignedToGiftCardId(null);
                 giftCardPoolRepository.save(poolCard);
@@ -1010,6 +1045,7 @@ public class GiftCardServiceImpl implements GiftCardService {
                 poolCard.getRedemptionUrl(),
                 poolCard.getRedemptionInstructions(),
                 poolCard.getStatus(),
+                poolCard.getCustomStatusLabel(),
                 poolCard.getBatchLabel(),
                 poolCard.getUploadedBy(),
                 poolCard.getUploadedAt(),
@@ -1046,6 +1082,7 @@ public class GiftCardServiceImpl implements GiftCardService {
         int cleanedCount = 0;
         for (GiftCardPool card : orphanedCards) {
             card.setStatus(PoolStatus.AVAILABLE);
+            card.setCustomStatusLabel(null);
             card.setAssignedAt(null);
             card.setAssignedToGiftCardId(null);
             giftCardPoolRepository.save(card);

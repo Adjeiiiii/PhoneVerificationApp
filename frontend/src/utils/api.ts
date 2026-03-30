@@ -394,8 +394,11 @@ export const api = {
     return api.post(`/api/admin/gift-cards/${giftCardId}/notes`, { notes });
   },
 
-  updateGiftCardInPool: async (poolId: string, cardCode: string) => {
-    return api.put(`/api/admin/gift-cards/pool/${poolId}`, { cardCode });
+  updateGiftCardInPool: async (
+    poolId: string,
+    body: { cardCode?: string; status?: string; customStatusLabel?: string | null }
+  ) => {
+    return api.put(`/api/admin/gift-cards/pool/${poolId}`, body);
   },
 
   deleteGiftCardFromPool: async (poolId: string) => {

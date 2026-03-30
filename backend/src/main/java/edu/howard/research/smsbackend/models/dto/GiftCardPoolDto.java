@@ -21,6 +21,8 @@ public class GiftCardPoolDto {
     private String redemptionUrl;
     private String redemptionInstructions;
     private PoolStatus status;
+    /** Present when status is OTHER */
+    private String customStatusLabel;
     private String batchLabel;
     private String uploadedBy;
     private OffsetDateTime uploadedAt;
