@@ -491,6 +491,12 @@ export const api = {
     });
   },
 
+  getEnrollmentAuditLog: async (page = 0, size = 50) => {
+    return api.get(`/api/admin/enrollment/audit-log?page=${page}&size=${size}`, {
+      headers: getEnrollmentAccessTokenHeader(),
+    });
+  },
+
   requestEnrollmentAccessToken: async (password: string) => {
     return api.post('/api/admin/enrollment/access-token', { password });
   },

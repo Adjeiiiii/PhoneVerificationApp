@@ -1,5 +1,6 @@
 package edu.howard.research.smsbackend.controllers;
 
+import edu.howard.research.smsbackend.models.dto.EnrollmentAuditLogEntryDto;
 import edu.howard.research.smsbackend.models.dto.EnrollmentConfigDto;
 import edu.howard.research.smsbackend.models.dto.EnrollmentAccessRequest;
 import edu.howard.research.smsbackend.models.dto.EnrollmentAccessResponse;
@@ -12,6 +13,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.web.bind.annotation.*;
@@ -111,6 +115,23 @@ public class AdminEnrollmentController {
         String adminUsername = JwtAuthenticationFilter.getCurrentUsername();
         EnrollmentConfigDto config = enrollmentService.updateEnrollmentConfig(request, adminUsername);
         return ResponseEntity.ok(config);
+    }
+
+    /**
+     * Recent enrollment settings changes (admin + enrollment access token).
+     */
+    @GetMapping("/audit-log")
+    public ResponseEntity<?> getEnrollmentAuditLog(
+            @RequestHeader(value = ENROLLMENT_ACCESS_HEADER, required = false) String enrollmentAccessToken,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        if (!hasValidEnrollmentAccessToken(enrollmentAccessToken)) {
+            return unauthorizedEnrollmentAccess();
+        }
+        Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100));
+        Page<EnrollmentAuditLogEntryDto> logs = enrollmentService.listEnrollmentAuditLog(pageable);
+        return ResponseEntity.ok(logs);
     }
 }
 

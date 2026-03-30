@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import { api } from '../../utils/api';
+
+const CONFIRM_PHRASE = 'YES';
+const MIN_SURVEY_PASSWORD_LEN = 6;
+const AUDIT_PAGE_SIZE = 25;
 
 const EnrollmentManagement: React.FC = () => {
   const ENROLLMENT_ACCESS_TOKEN_KEY = 'enrollmentAccessToken';
@@ -10,12 +14,67 @@ const EnrollmentManagement: React.FC = () => {
   const [unlocking, setUnlocking] = useState(false);
   const [accessGranted, setAccessGranted] = useState(false);
   const [accessPassword, setAccessPassword] = useState('');
+  const [showAccessPassword, setShowAccessPassword] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [maxParticipants, setMaxParticipants] = useState<string>('');
   const [isEnrollmentActive, setIsEnrollmentActive] = useState(true);
   const [surveyAccessEnabled, setSurveyAccessEnabled] = useState(true);
   const [surveyAccessPassword, setSurveyAccessPassword] = useState('');
+  const [surveyAccessPasswordConfirm, setSurveyAccessPasswordConfirm] = useState('');
+  const [showSurveyAccessPassword, setShowSurveyAccessPassword] = useState(false);
+  const [showSurveyAccessPasswordConfirm, setShowSurveyAccessPasswordConfirm] = useState(false);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmPhraseInput, setConfirmPhraseInput] = useState('');
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [pendingConfirmReasons, setPendingConfirmReasons] = useState<string[]>([]);
+  type AuditEntry = { id: string; createdAt: string; actorUsername: string; summary: string };
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [auditLogLoading, setAuditLogLoading] = useState(false);
+  const [auditLogLoadingMore, setAuditLogLoadingMore] = useState(false);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditTotalElements, setAuditTotalElements] = useState<number | null>(null);
+  const auditNextPageRef = useRef(0);
+
+  /** @param reset If true, reload from page 0 (after save or initial load). If false, append next page. */
+  const fetchAuditLog = async (reset: boolean) => {
+    if (reset) {
+      auditNextPageRef.current = 0;
+      setAuditLogLoading(true);
+    } else {
+      setAuditLogLoadingMore(true);
+    }
+    try {
+      const pageIdx = reset ? 0 : auditNextPageRef.current;
+      const page = await api.getEnrollmentAuditLog(pageIdx, AUDIT_PAGE_SIZE);
+      const content = Array.isArray(page?.content) ? page.content : [];
+      if (typeof page?.totalElements === 'number') {
+        setAuditTotalElements(page.totalElements);
+      }
+      if (reset) {
+        setAuditLog(content);
+      } else {
+        setAuditLog((prev) => [...prev, ...content]);
+      }
+      const n = page?.number ?? pageIdx;
+      auditNextPageRef.current = n + 1;
+      const totalPages = page?.totalPages ?? 0;
+      const lastFlag = page?.last;
+      const hasMore =
+        lastFlag === false ||
+        (lastFlag === undefined && totalPages > 0 && n < totalPages - 1);
+      setAuditHasMore(hasMore);
+    } catch {
+      if (reset) {
+        setAuditLog([]);
+        setAuditTotalElements(null);
+      }
+      setAuditHasMore(false);
+    } finally {
+      setAuditLogLoading(false);
+      setAuditLogLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     // Require password every time this page/tab is opened.
@@ -55,6 +114,8 @@ const EnrollmentManagement: React.FC = () => {
       setIsEnrollmentActive(data.isEnrollmentActive ?? true);
       setSurveyAccessEnabled(data.surveyAccessEnabled ?? true);
       setSurveyAccessPassword('');
+      setSurveyAccessPasswordConfirm('');
+      await fetchAuditLog(true);
     } catch (error: any) {
       const msg = error.message || 'Failed to fetch enrollment configuration';
       setMessage({ type: 'error', text: msg });
@@ -83,40 +144,142 @@ const EnrollmentManagement: React.FC = () => {
     }
   };
 
+  /** Human-readable list of every difference vs last-loaded config; empty if nothing to save. */
+  const getPendingChangeDescriptions = (): string[] => {
+    const changes: string[] = [];
+    if (!config) return changes;
+
+    const wasEnrollmentActive = config.isEnrollmentActive ?? true;
+    if (isEnrollmentActive !== wasEnrollmentActive) {
+      changes.push(
+        isEnrollmentActive
+          ? 'Enrollment will be opened—new participants will be able to enroll again.'
+          : 'Enrollment will be closed—new participants will not be able to enroll.'
+      );
+    }
+
+    const wasSurveyGateOn = config.surveyAccessEnabled ?? true;
+    if (surveyAccessEnabled !== wasSurveyGateOn) {
+      changes.push(
+        surveyAccessEnabled
+          ? 'The survey access password requirement will be turned on.'
+          : 'The survey access password requirement will be turned off.'
+      );
+    }
+
+    if (surveyAccessPassword.trim().length > 0) {
+      changes.push('The survey access password will be updated.');
+    }
+
+    const oldMax: number | null = config.maxParticipants ?? null;
+    const newMaxVal: number | null =
+      maxParticipants.trim() === '' ? null : parseInt(maxParticipants, 10);
+
+    if (oldMax !== newMaxVal) {
+      if (oldMax === null && newMaxVal !== null && !isNaN(newMaxVal)) {
+        changes.push(`Maximum participants will be set to ${newMaxVal} (switch from unlimited to a cap).`);
+      } else if (oldMax !== null && newMaxVal === null) {
+        changes.push(`Maximum participants will be set to unlimited (was ${oldMax}).`);
+      } else if (
+        oldMax !== null &&
+        newMaxVal !== null &&
+        !isNaN(newMaxVal) &&
+        oldMax !== newMaxVal
+      ) {
+        changes.push(`Maximum participants will change from ${oldMax} to ${newMaxVal}.`);
+      }
+    }
+
+    return changes;
+  };
+
+  const runSave = async () => {
+    const maxParticipantsValue = maxParticipants.trim() === '' ? null : parseInt(maxParticipants, 10);
+    const updated = await api.updateEnrollmentConfig(
+      maxParticipantsValue,
+      isEnrollmentActive,
+      surveyAccessEnabled,
+      surveyAccessPassword.trim() || undefined
+    );
+    setConfig(updated);
+    setSurveyAccessPassword('');
+    setSurveyAccessPasswordConfirm('');
+    setMessage({ type: 'success', text: 'Enrollment settings updated successfully!' });
+    await fetchAuditLog(true);
+  };
+
   const handleSave = async () => {
+    setMessage(null);
+
+    const maxParticipantsValue = maxParticipants.trim() === '' ? null : parseInt(maxParticipants, 10);
+
+    if (maxParticipantsValue !== null && (isNaN(maxParticipantsValue) || maxParticipantsValue < 1)) {
+      setMessage({ type: 'error', text: 'Maximum participants must be at least 1, or leave empty for unlimited' });
+      return;
+    }
+
+    if (maxParticipantsValue !== null && maxParticipantsValue < (config?.currentCount || 0)) {
+      setMessage({
+        type: 'error',
+        text: `Cannot set maximum participants to ${maxParticipantsValue}. Current enrollment is ${config?.currentCount || 0}. Please set a limit of at least ${config?.currentCount || 0} or delete some participants first.`,
+      });
+      return;
+    }
+
+    const newPwd = surveyAccessPassword.trim();
+    if (newPwd.length > 0) {
+      if (newPwd.length < MIN_SURVEY_PASSWORD_LEN) {
+        setMessage({ type: 'error', text: `Survey access password must be at least ${MIN_SURVEY_PASSWORD_LEN} characters.` });
+        return;
+      }
+      if (newPwd !== surveyAccessPasswordConfirm.trim()) {
+        setMessage({ type: 'error', text: 'Survey access passwords do not match. Please re-enter them.' });
+        return;
+      }
+    } else if (surveyAccessPasswordConfirm.trim().length > 0) {
+      setMessage({ type: 'error', text: 'Clear the confirm field or enter the new password in both fields.' });
+      return;
+    }
+
+    const changes = getPendingChangeDescriptions();
+    if (changes.length === 0) {
+      setMessage({
+        type: 'success',
+        text: 'Everything is already saved. No changes to apply.',
+      });
+      return;
+    }
+
+    setPendingConfirmReasons(changes);
+    setConfirmPhraseInput('');
+    setConfirmError(null);
+    setConfirmModalOpen(true);
+  };
+
+  const handleConfirmModalSubmit = async () => {
+    if (confirmPhraseInput.trim().toUpperCase() !== CONFIRM_PHRASE) {
+      setConfirmError(`Type ${CONFIRM_PHRASE} in capital letters to confirm.`);
+      return;
+    }
+    setConfirmError(null);
+    setConfirmModalOpen(false);
+    setPendingConfirmReasons([]);
+    setConfirmPhraseInput('');
     try {
       setSaving(true);
-      setMessage(null);
-
-      const maxParticipantsValue = maxParticipants.trim() === '' ? null : parseInt(maxParticipants, 10);
-      
-      if (maxParticipantsValue !== null && (isNaN(maxParticipantsValue) || maxParticipantsValue < 1)) {
-        setMessage({ type: 'error', text: 'Maximum participants must be at least 1, or leave empty for unlimited' });
-        return;
-      }
-
-      if (maxParticipantsValue !== null && maxParticipantsValue < (config?.currentCount || 0)) {
-        setMessage({ 
-          type: 'error', 
-          text: `Cannot set maximum participants to ${maxParticipantsValue}. Current enrollment is ${config?.currentCount || 0}. Please set a limit of at least ${config?.currentCount || 0} or delete some participants first.` 
-        });
-        return;
-      }
-
-      const updated = await api.updateEnrollmentConfig(
-        maxParticipantsValue,
-        isEnrollmentActive,
-        surveyAccessEnabled,
-        surveyAccessPassword.trim() || undefined
-      );
-      setConfig(updated);
-      setSurveyAccessPassword('');
-      setMessage({ type: 'success', text: 'Enrollment settings updated successfully!' });
+      await runSave();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to update enrollment configuration' });
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleConfirmModalCancel = () => {
+    setConfirmModalOpen(false);
+    setConfirmPhraseInput('');
+    setConfirmError(null);
+    setPendingConfirmReasons([]);
   };
 
   const getStatusColor = (status: string) => {
@@ -187,19 +350,38 @@ const EnrollmentManagement: React.FC = () => {
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Password
             </label>
-            <input
-              type="password"
-              value={accessPassword}
-              onChange={(e) => setAccessPassword(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && accessPassword.trim() && !unlocking) {
-                  handleUnlockAccess();
-                }
-              }}
-              className="w-full px-4 py-3 text-slate-800 placeholder:text-slate-400 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-600 transition-colors duration-150"
-              placeholder="Enter enrollment settings password"
-              autoFocus
-            />
+            <div className="relative">
+              <input
+                type={showAccessPassword ? 'text' : 'password'}
+                value={accessPassword}
+                onChange={(e) => setAccessPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && accessPassword.trim() && !unlocking) {
+                    handleUnlockAccess();
+                  }
+                }}
+                className="w-full px-4 py-3 pr-12 text-slate-800 placeholder:text-slate-400 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-0 focus:border-blue-600 transition-colors duration-150"
+                placeholder="Enter enrollment settings password"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowAccessPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100"
+                aria-label={showAccessPassword ? 'Hide password' : 'Show password'}
+              >
+                {showAccessPassword ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0L3 3m3.29 3.29L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
             {accessError && (
               <p className="mt-2 text-sm text-red-600">{accessError}</p>
             )}
@@ -377,19 +559,73 @@ const EnrollmentManagement: React.FC = () => {
                   <p className="text-xs text-gray-500 ml-8">
                     When enabled, participants must enter a study password before accessing survey enrollment.
                   </p>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Set New Survey Access Password
-                    </label>
-                    <input
-                      type="password"
-                      value={surveyAccessPassword}
-                      onChange={(e) => setSurveyAccessPassword(e.target.value)}
-                      placeholder={config?.hasSurveyAccessPassword ? 'Leave blank to keep current password' : 'Set survey access password'}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Minimum 6 characters. Leave blank to keep the existing password.
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        New survey access password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showSurveyAccessPassword ? 'text' : 'password'}
+                          value={surveyAccessPassword}
+                          onChange={(e) => setSurveyAccessPassword(e.target.value)}
+                          placeholder={config?.hasSurveyAccessPassword ? 'Leave blank to keep current password' : 'Enter new password'}
+                          autoComplete="new-password"
+                          className="w-full px-4 py-2.5 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSurveyAccessPassword((v) => !v)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-800 rounded-md hover:bg-gray-100"
+                          aria-label={showSurveyAccessPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showSurveyAccessPassword ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0L3 3m3.29 3.29L21 21" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Confirm new password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showSurveyAccessPasswordConfirm ? 'text' : 'password'}
+                          value={surveyAccessPasswordConfirm}
+                          onChange={(e) => setSurveyAccessPasswordConfirm(e.target.value)}
+                          placeholder="Re-enter new password"
+                          autoComplete="new-password"
+                          className="w-full px-4 py-2.5 pr-11 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSurveyAccessPasswordConfirm((v) => !v)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-800 rounded-md hover:bg-gray-100"
+                          aria-label={showSurveyAccessPasswordConfirm ? 'Hide password' : 'Show password'}
+                        >
+                          {showSurveyAccessPasswordConfirm ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0L3 3m3.29 3.29L21 21" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Minimum {MIN_SURVEY_PASSWORD_LEN} characters. Leave both fields blank to keep the existing password.
                     </p>
                   </div>
                 </div>
@@ -437,7 +673,106 @@ const EnrollmentManagement: React.FC = () => {
               </div>
             </div>
 
+            {/* Enrollment change history */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-1">Change history</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Logged when settings are saved. Survey passwords are never stored—only that a new password was set.
+              </p>
+              {auditLogLoading ? (
+                <p className="text-sm text-gray-500">Loading history…</p>
+              ) : auditLog.length === 0 ? (
+                <p className="text-sm text-gray-500">No changes recorded yet.</p>
+              ) : (
+                <>
+                  {auditTotalElements != null && (
+                    <p className="text-xs text-gray-500 mb-2">
+                      Showing {auditLog.length} of {auditTotalElements}{' '}
+                      {auditTotalElements === 1 ? 'entry' : 'entries'}
+                    </p>
+                  )}
+                  <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+                    {auditLog.map((entry) => (
+                      <li key={entry.id} className="px-4 py-3 bg-white">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="text-xs font-medium text-gray-500">
+                            {new Date(entry.createdAt).toLocaleString()}
+                          </span>
+                          <span className="text-xs text-gray-600">{entry.actorUsername}</span>
+                        </div>
+                        <p className="text-sm text-gray-800 mt-1">{entry.summary}</p>
+                      </li>
+                    ))}
+                  </ul>
+                  {auditHasMore && (
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => fetchAuditLog(false)}
+                        disabled={auditLogLoadingMore}
+                        className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {auditLogLoadingMore ? 'Loading…' : 'Load more'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
           </div>
+      )}
+
+      {confirmModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="enrollment-confirm-title">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-gray-200 p-6">
+            <h3 id="enrollment-confirm-title" className="text-lg font-semibold text-gray-900 mb-2">
+              Confirm changes
+            </h3>
+            <p className="text-sm text-gray-600 mb-3">
+              You are about to apply the following:
+            </p>
+            <ul className="list-disc list-inside text-sm text-gray-800 space-y-1 mb-4">
+              {pendingConfirmReasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+            <p className="text-sm text-gray-700 mb-2">
+              Type <span className="font-mono font-semibold text-gray-900">{CONFIRM_PHRASE}</span> to continue:
+            </p>
+            <input
+              type="text"
+              value={confirmPhraseInput}
+              onChange={(e) => {
+                setConfirmPhraseInput(e.target.value);
+                setConfirmError(null);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+              placeholder={CONFIRM_PHRASE}
+              autoComplete="off"
+              autoFocus
+            />
+            {confirmError && <p className="mt-2 text-sm text-red-600">{confirmError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmModalCancel}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmModalSubmit}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Confirm and save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );
