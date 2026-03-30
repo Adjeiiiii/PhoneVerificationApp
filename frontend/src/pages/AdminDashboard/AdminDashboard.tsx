@@ -28,6 +28,10 @@ interface VerificationRecord {
 
 // LinkRecord interface removed - no longer used
 
+/** When true, bulk complete (by file) and bulk “Survey Actions” stay visible but cannot be used. */
+const BULK_COMPLETE_DISABLED = true;
+const BULK_COMPLETE_DISABLED_NOTICE = 'This feature is disabled until further notice.';
+
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
 
@@ -77,7 +81,7 @@ const AdminDashboard: React.FC = () => {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showBulkResendModal, setShowBulkResendModal] = useState(false);
   const [showBulkSurveyModal, setShowBulkSurveyModal] = useState(false);
-  
+
   // For individual action confirmations
   const [showRemindConfirmModal, setShowRemindConfirmModal] = useState(false);
   const [remindRecord, setRemindRecord] = useState<VerificationRecord | null>(null);
@@ -542,49 +546,57 @@ const AdminDashboard: React.FC = () => {
     setShowBulkResendModal(false);
   };
 
-  // Bulk mark surveys as completed
   const handleBulkMarkSurveysCompleted = async () => {
+    if (BULK_COMPLETE_DISABLED) {
+      setBulkActionMessage(BULK_COMPLETE_DISABLED_NOTICE);
+      return;
+    }
     try {
-      
       if (selectedRecordIds.length === 0) {
         setBulkActionMessage('No surveys selected');
         return;
       }
-      
+
       const response = await api.bulkMarkSurveysCompleted(selectedRecordIds);
-      
+
       if (response && response.success) {
         setBulkActionMessage(`Successfully marked ${response.completedCount} surveys as completed`);
         setSelectedRecordIds([]);
-        fetchStatsAndRecords(); // Refresh the data
+        fetchStatsAndRecords();
       } else {
         setBulkActionMessage(`Error: ${response?.error || 'Unknown error'}`);
       }
     } catch (error) {
-      setBulkActionMessage(`Error marking surveys as completed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setBulkActionMessage(
+        `Error marking surveys as completed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   };
 
-  // Bulk mark surveys as not completed
   const handleBulkMarkSurveysUncompleted = async () => {
+    if (BULK_COMPLETE_DISABLED) {
+      setBulkActionMessage(BULK_COMPLETE_DISABLED_NOTICE);
+      return;
+    }
     try {
-      
       if (selectedRecordIds.length === 0) {
         setBulkActionMessage('No surveys selected');
         return;
       }
-      
+
       const response = await api.bulkMarkSurveysUncompleted(selectedRecordIds);
-      
+
       if (response && response.success) {
         setBulkActionMessage(`Successfully marked ${response.uncompletedCount} surveys as not completed`);
         setSelectedRecordIds([]);
-        fetchStatsAndRecords(); // Refresh the data
+        fetchStatsAndRecords();
       } else {
         setBulkActionMessage(`Error: ${response?.error || 'Unknown error'}`);
       }
     } catch (error) {
-      setBulkActionMessage(`Error marking surveys as not completed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setBulkActionMessage(
+        `Error marking surveys as not completed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   };
 
@@ -759,6 +771,7 @@ const AdminDashboard: React.FC = () => {
                   )}
                 </button>
                 <button
+                  type="button"
                   onClick={() => setActiveTab('bulk-complete')}
                   className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === 'bulk-complete'
@@ -767,6 +780,11 @@ const AdminDashboard: React.FC = () => {
                   }`}
                 >
                   Bulk Complete
+                  {BULK_COMPLETE_DISABLED && (
+                    <span className="ml-2 bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-xs">
+                      Off
+                    </span>
+                  )}
                 </button>
               </nav>
             </div>
@@ -850,14 +868,25 @@ const AdminDashboard: React.FC = () => {
                   Remind ({selectedRecordIds.length})
                 </button>
                 <button
+                  type="button"
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center shadow-sm
-                    ${selectedRecordIds.length === 0 
-                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200' 
-                      : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md'}`}
-                  disabled={selectedRecordIds.length === 0}
-                  onClick={() => setShowBulkSurveyModal(true)}
+                    ${
+                      selectedRecordIds.length === 0 || BULK_COMPLETE_DISABLED
+                        ? 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md'
+                    }`}
+                  disabled={selectedRecordIds.length === 0 || BULK_COMPLETE_DISABLED}
+                  title={BULK_COMPLETE_DISABLED ? BULK_COMPLETE_DISABLED_NOTICE : undefined}
+                  onClick={() => {
+                    if (!BULK_COMPLETE_DISABLED) setShowBulkSurveyModal(true);
+                  }}
                 >
-                  <svg className={`w-4 h-4 mr-2 ${selectedRecordIds.length === 0 ? 'text-gray-400' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className={`w-4 h-4 mr-2 ${selectedRecordIds.length === 0 || BULK_COMPLETE_DISABLED ? 'text-gray-400' : 'text-slate-600'}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Survey Actions ({selectedRecordIds.length})
@@ -1366,6 +1395,23 @@ const AdminDashboard: React.FC = () => {
           {activeTab === 'bulk-complete' && (
             <div className="bg-white rounded-lg shadow flex-1 flex flex-col min-h-0 overflow-y-auto">
               <div className="p-6">
+                {BULK_COMPLETE_DISABLED && (
+                  <div
+                    className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                    role="status"
+                  >
+                    <p className="font-semibold">{BULK_COMPLETE_DISABLED_NOTICE}</p>
+                    <p className="mt-1 text-amber-900/90">
+                      Upload and processing are turned off. You can still mark surveys completed for individual
+                      participants from the row actions on the All Invitations tab.
+                    </p>
+                  </div>
+                )}
+
+                <fieldset
+                  disabled={BULK_COMPLETE_DISABLED}
+                  className="min-w-0 border-0 p-0 m-0 space-y-6 disabled:[&_button]:pointer-events-none disabled:[&_label]:pointer-events-none"
+                >
                 <div className="mb-6">
                   <h2 className="text-xl font-bold text-gray-800 mb-2">
                     Bulk Mark Surveys as Completed
@@ -1721,6 +1767,7 @@ const AdminDashboard: React.FC = () => {
                     <p className="text-sm text-red-800">{bulkCompleteError}</p>
                   </div>
                 )}
+                </fieldset>
               </div>
             </div>
           )}
@@ -2133,10 +2180,17 @@ const AdminDashboard: React.FC = () => {
             </p>
                 </div>
               </div>
+
+              {BULK_COMPLETE_DISABLED && (
+                <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                  <p className="font-semibold">{BULK_COMPLETE_DISABLED_NOTICE}</p>
+                </div>
+              )}
               
               <div className="grid grid-cols-2 gap-3 mb-6">
               <button
-                  className="group relative bg-white border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-4 text-left transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                  className="group relative bg-white border-2 border-emerald-200 hover:border-emerald-400 rounded-xl p-4 text-left transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                disabled={BULK_COMPLETE_DISABLED}
                 onClick={async () => {
                   await handleBulkMarkSurveysCompleted();
                   setShowBulkSurveyModal(false);
@@ -2160,7 +2214,8 @@ const AdminDashboard: React.FC = () => {
               </button>
                 
               <button
-                  className="group relative bg-white border-2 border-slate-200 hover:border-slate-400 rounded-xl p-4 text-left transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+                  className="group relative bg-white border-2 border-slate-200 hover:border-slate-400 rounded-xl p-4 text-left transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                disabled={BULK_COMPLETE_DISABLED}
                 onClick={async () => {
                   await handleBulkMarkSurveysUncompleted();
                   setShowBulkSurveyModal(false);
