@@ -54,6 +54,13 @@ public class Participant {
     @Column(name = "signup_ip", length = 45)
     private String signupIp;
 
+    /**
+     * Random unique id (UUID string) for new signups only; appended as {@code &uid=} on outbound survey links.
+     * Null for participants created before this feature.
+     */
+    @Column(name = "link_public_uid", length = 36, unique = true)
+    private String linkPublicUid;
+
     // Getters & setters
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -84,4 +91,7 @@ public class Participant {
 
     public String getSignupIp() { return signupIp; }
     public void setSignupIp(String signupIp) { this.signupIp = signupIp; }
+
+    public String getLinkPublicUid() { return linkPublicUid; }
+    public void setLinkPublicUid(String linkPublicUid) { this.linkPublicUid = linkPublicUid; }
 }

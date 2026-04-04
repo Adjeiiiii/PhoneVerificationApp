@@ -10,9 +10,11 @@ import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SmsEventLogRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
+import edu.howard.research.smsbackend.util.LinkUrlUtils;
 import edu.howard.research.smsbackend.util.PhoneNumberService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +59,7 @@ public class SurveyServiceImpl implements SurveyService {
                         np.setPhone(e164);
                         np.setStatus(ParticipantStatus.SUBSCRIBED);
                         np.setPhoneVerified(true);
+                        np.setLinkPublicUid(UUID.randomUUID().toString());
                         return participantRepository.save(np);
                     });
 
@@ -84,16 +87,19 @@ public class SurveyServiceImpl implements SurveyService {
             SurveyLinkPool linkRef = new SurveyLinkPool();
             linkRef.setId(linkId);
 
-            // 3) create invitation
+            // 3) create invitation — persist long URL with uid; short URL stays a proxy (no uid on SMS).
+            String storedLong = LinkUrlUtils.appendParticipantUid(linkUrl, p.getLinkPublicUid());
             SurveyInvitation inv = new SurveyInvitation();
             inv.setParticipant(p);
             inv.setLink(linkRef);
-            inv.setLinkUrl(linkUrl);
+            inv.setLinkUrl(storedLong);
             inv.setShortLinkUrl(shortLinkUrl);
             inv = invitationRepository.save(inv);
 
-            // 4) send SMS - use short link if available, otherwise use long link
-            String linkToSend = (shortLinkUrl != null && !shortLinkUrl.isBlank()) ? shortLinkUrl : linkUrl;
+            // 4) send SMS — short URL never includes uid (redirect adds long+uid); else send stored long URL.
+            String linkToSend = (shortLinkUrl != null && !shortLinkUrl.isBlank())
+                    ? LinkUrlUtils.shortLinkForOutbound(shortLinkUrl)
+                    : storedLong;
             String body = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
             Map<String, Object> send = smsService.send(e164, body);
 
@@ -170,7 +176,10 @@ public class SurveyServiceImpl implements SurveyService {
             return;
         }
 
-        var opt = invitationRepository.findTopByLinkUrlOrderByCreatedAtDesc(url.trim());
+        String trimmed = url.trim();
+        String base = LinkUrlUtils.withoutUidParameter(trimmed);
+        var hits = invitationRepository.findForSurveyCompletion(trimmed, base, PageRequest.of(0, 1));
+        Optional<SurveyInvitation> opt = hits.isEmpty() ? Optional.empty() : Optional.of(hits.get(0));
         if (opt.isEmpty()) {
             log.warn("No invitation found for completed URL: {}", url);
             SmsEventLog logRow = new SmsEventLog();

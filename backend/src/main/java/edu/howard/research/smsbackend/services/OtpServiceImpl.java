@@ -17,6 +17,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -115,6 +116,7 @@ public class OtpServiceImpl implements OtpService {
                 newParticipant.setStatus(ParticipantStatus.SUBSCRIBED);
                 newParticipant.setPhoneVerified(true);
                 newParticipant.setVerifiedAt(OffsetDateTime.now());
+                newParticipant.setLinkPublicUid(UUID.randomUUID().toString());
                 if (clientIp != null && !clientIp.isBlank()) {
                     newParticipant.setSignupIp(clientIp.trim());
                 }

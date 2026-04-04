@@ -9,6 +9,7 @@ import edu.howard.research.smsbackend.services.EnrollmentService;
 import edu.howard.research.smsbackend.services.PhoneValidationService;
 import edu.howard.research.smsbackend.services.SmsService;
 import edu.howard.research.smsbackend.services.SurveyService;
+import edu.howard.research.smsbackend.util.LinkUrlUtils;
 import edu.howard.research.smsbackend.util.PhoneNumberService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -176,8 +177,8 @@ public class ParticipantsController {
                             phone, isReminder, invitation.getQueuedAt(), invitation.getSentAt(), invitation.getId());
                     
                     // Use the SAME link from the original invitation (short link if available, otherwise long link)
-                    String linkToSend = (invitation.getShortLinkUrl() != null && !invitation.getShortLinkUrl().isBlank()) 
-                            ? invitation.getShortLinkUrl() 
+                    String linkToSend = (invitation.getShortLinkUrl() != null && !invitation.getShortLinkUrl().isBlank())
+                            ? LinkUrlUtils.shortLinkForOutbound(invitation.getShortLinkUrl())
                             : invitation.getLinkUrl();
                     
                     log.info("Using original invitation link for reminder - shortLink: {}, longLink: {}, finalLink: {}", 

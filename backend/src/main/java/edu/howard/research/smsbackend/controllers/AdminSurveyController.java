@@ -22,6 +22,7 @@ import edu.howard.research.smsbackend.services.EmailService;
 import edu.howard.research.smsbackend.services.GiftCardService;
 import edu.howard.research.smsbackend.services.InvitationsService;
 import edu.howard.research.smsbackend.services.SmsService;
+import edu.howard.research.smsbackend.util.LinkUrlUtils;
 import edu.howard.research.smsbackend.util.PhoneNumberService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -372,6 +373,19 @@ public class AdminSurveyController {
         );
     }
 
+    /** Full invitation with eager participant and pool link (for admin detail view). */
+    @GetMapping("/invitations/{id}")
+    public ResponseEntity<?> getInvitation(@PathVariable UUID id, HttpServletRequest request) {
+        if (!isValidAdminToken(request)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized access"));
+        }
+        return inviteRepo.findById(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Invitation not found")));
+    }
+
     // ---------- List verified participants without invitations ----------
     @GetMapping("/participants/verified-without-invitations")
     public ResponseEntity<?> listVerifiedWithoutInvitations(
@@ -479,15 +493,15 @@ public class AdminSurveyController {
         SurveyInvitation inv = new SurveyInvitation();
         inv.setParticipant(p);
         inv.setLink(link);
-        inv.setLinkUrl(link.getLinkUrl());
+        inv.setLinkUrl(LinkUrlUtils.appendParticipantUid(link.getLinkUrl(), p.getLinkPublicUid()));
         inv.setShortLinkUrl(link.getShortLinkUrl());
         inv.setCreatedAt(OffsetDateTime.now());
         inv.setMessageStatus("pending");
         inv = inviteRepo.save(inv);
 
-        // 5) Send SMS - use short link if available, otherwise use long link
-        String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 
-                ? inv.getShortLinkUrl() 
+        // 5) Send SMS — short URL is proxy only (no uid on SMS); redirect serves stored long URL (with uid).
+        String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank())
+                ? LinkUrlUtils.shortLinkForOutbound(inv.getShortLinkUrl())
                 : inv.getLinkUrl();
         String smsBody = "Here's the Howard University AI for Health survey link: " + linkToSend + ". You can pause and restart at any time. The survey MUST be completed within 10 days. Once done, we'll send your Amazon gift card. For questions, text/email us at (240) 428-8442.";
         Map<String, Object> send = smsService.send(phone, smsBody);
@@ -565,10 +579,10 @@ public class AdminSurveyController {
         
         // 2) Send SMS - use the SAME link from the original invitation (short link if available, otherwise long link)
         // This ensures reminders use the exact same link that was originally sent
-        String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank()) 
-                ? inv.getShortLinkUrl() 
+        String linkToSend = (inv.getShortLinkUrl() != null && !inv.getShortLinkUrl().isBlank())
+                ? LinkUrlUtils.shortLinkForOutbound(inv.getShortLinkUrl())
                 : inv.getLinkUrl();
-        
+
         if (isReminder) {
             log.info("Sending reminder for invitation {} - using original link: {} (shortLink: {}, longLink: {})", 
                     inv.getId(), linkToSend, inv.getShortLinkUrl(), inv.getLinkUrl());

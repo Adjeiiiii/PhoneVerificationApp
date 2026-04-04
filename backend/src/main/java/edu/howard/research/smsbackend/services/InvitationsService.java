@@ -8,9 +8,11 @@ import edu.howard.research.smsbackend.models.entities.SurveyLinkPool;
 import edu.howard.research.smsbackend.repositories.ParticipantRepository;
 import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
+import edu.howard.research.smsbackend.util.LinkUrlUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,8 +68,8 @@ public class InvitationsService {
         
         inv.setCreatedAt(OffsetDateTime.now());
         inv.setMessageStatus("pending");
-        inv.setLinkUrl(claim.getLinkUrl());  // denormalized URL for easy sending
-        inv.setShortLinkUrl(claim.getShortLinkUrl());  // denormalized short URL
+        inv.setLinkUrl(LinkUrlUtils.appendParticipantUid(claim.getLinkUrl(), participant.getLinkPublicUid()));
+        inv.setShortLinkUrl(claim.getShortLinkUrl());
 
         inv = inviteRepo.save(inv);
 
@@ -75,6 +77,17 @@ public class InvitationsService {
         linkRepo.markAssigned(claim.getLinkId());
 
         return Optional.of(inv);
+    }
+
+    /** Resolve an exported or callback URL to an invitation (pool URL, long+uid, or long without uid). */
+    public Optional<SurveyInvitation> findInvitationForSubmittedLink(String url) {
+        if (url == null || url.isBlank()) {
+            return Optional.empty();
+        }
+        String trimmed = url.trim();
+        String base = LinkUrlUtils.withoutUidParameter(trimmed);
+        var hits = inviteRepo.findForSurveyCompletion(trimmed, base, PageRequest.of(0, 1));
+        return hits.isEmpty() ? Optional.empty() : Optional.of(hits.get(0));
     }
 
     /**
@@ -201,14 +214,10 @@ public class InvitationsService {
         Set<String> uniqueUrls = new HashSet<>(normalizedLinks);
         List<String> uniqueUrlList = new ArrayList<>(uniqueUrls);
 
-        // Find all invitations matching these URLs
-        List<SurveyInvitation> foundInvitations = inviteRepo.findByLinkUrlIn(uniqueUrlList);
-        Map<String, SurveyInvitation> urlToInvitation = foundInvitations.stream()
-                .collect(Collectors.toMap(
-                        SurveyInvitation::getLinkUrl,
-                        inv -> inv,
-                        (existing, replacement) -> existing // If duplicate URLs in DB, keep first
-                ));
+        Map<String, SurveyInvitation> urlToInvitation = new LinkedHashMap<>();
+        for (String u : uniqueUrlList) {
+            findInvitationForSubmittedLink(u).ifPresent(inv -> urlToInvitation.put(u, inv));
+        }
 
         // Categorize invitations
         List<String> notFoundLinks = new ArrayList<>();
@@ -285,15 +294,11 @@ public class InvitationsService {
         Map<String, Long> urlCounts = normalizedLinks.stream()
                 .collect(Collectors.groupingBy(url -> url, Collectors.counting()));
 
-        // Find all invitations matching these URLs
         Set<String> uniqueUrls = new HashSet<>(normalizedLinks);
-        List<SurveyInvitation> foundInvitations = inviteRepo.findByLinkUrlIn(new ArrayList<>(uniqueUrls));
-        Map<String, SurveyInvitation> urlToInvitation = foundInvitations.stream()
-                .collect(Collectors.toMap(
-                        SurveyInvitation::getLinkUrl,
-                        inv -> inv,
-                        (existing, replacement) -> existing
-                ));
+        Map<String, SurveyInvitation> urlToInvitation = new LinkedHashMap<>();
+        for (String u : uniqueUrls) {
+            findInvitationForSubmittedLink(u).ifPresent(inv -> urlToInvitation.put(u, inv));
+        }
 
         // Build preview for each link
         List<LinkPreviewDto> previews = new ArrayList<>();

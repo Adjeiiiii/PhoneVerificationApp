@@ -1,5 +1,7 @@
 package edu.howard.research.smsbackend.controllers;
 
+import edu.howard.research.smsbackend.models.entities.SurveyInvitation;
+import edu.howard.research.smsbackend.repositories.SurveyInvitationRepository;
 import edu.howard.research.smsbackend.repositories.SurveyLinkPoolRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,7 @@ import java.net.URI;
 public class ShortLinkController {
 
     private final SurveyLinkPoolRepository linkRepo;
+    private final SurveyInvitationRepository invitationRepo;
 
     /**
      * Redirects a short code to the original URL.
@@ -41,18 +44,24 @@ public class ShortLinkController {
         }
 
         var link = linkOpt.get();
-        String originalUrl = link.getLinkUrl();
+        String poolUrl = link.getLinkUrl();
 
-        if (originalUrl == null || originalUrl.isBlank()) {
+        if (poolUrl == null || poolUrl.isBlank()) {
             log.error("Link found but original URL is null or blank for code: {}", shortCode);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
 
-        log.info("Redirecting short code {} to: {}", shortCode, originalUrl);
+        // Prefer invitation's stored long URL (includes participant uid when applicable).
+        String targetUrl = invitationRepo.findFirstByLink_IdOrderByCreatedAtDesc(link.getId())
+                .map(SurveyInvitation::getLinkUrl)
+                .filter(u -> u != null && !u.isBlank())
+                .orElse(poolUrl);
+
+        log.info("Redirecting short code {} to: {}", shortCode, targetUrl);
 
         // Return HTTP 301 (permanent redirect) for better browser compatibility
         return ResponseEntity.status(HttpStatus.MOVED_PERMANENTLY)
-                .location(URI.create(originalUrl))
+                .location(URI.create(targetUrl))
                 .build();
     }
 }

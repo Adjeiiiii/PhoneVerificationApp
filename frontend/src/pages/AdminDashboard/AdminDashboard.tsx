@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
 import { api } from '../../utils/api';
+import { appendParticipantUid, normalizeShortLinkUrl, withoutUidParameter } from '../../utils/linkUrlUtils';
+import ParticipantInvitationDetailsModal from './ParticipantInvitationDetailsModal';
 
 interface Stats {
   totalVerifications: number;
@@ -85,6 +87,8 @@ const AdminDashboard: React.FC = () => {
   // For individual action confirmations
   const [showRemindConfirmModal, setShowRemindConfirmModal] = useState(false);
   const [remindRecord, setRemindRecord] = useState<VerificationRecord | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [detailsInvitationId, setDetailsInvitationId] = useState<string | null>(null);
   const [showMarkCompletedConfirmModal, setShowMarkCompletedConfirmModal] = useState(false);
   const [markCompletedRecord, setMarkCompletedRecord] = useState<VerificationRecord | null>(null);
   const [isMarkingCompleted, setIsMarkingCompleted] = useState(true); // true = mark completed, false = mark uncompleted
@@ -264,21 +268,27 @@ const AdminDashboard: React.FC = () => {
       .then((data: any) => {
         if (data && data.content) {
           // Convert backend format to frontend format
-          const convertedRecords = data.content.map((invitation: any) => ({
-            id: invitation.id,
-            phone_number: invitation.participant?.phone || '',
-            email: invitation.participant?.email || '', // Use actual participant email
-            assigned_link: invitation.linkUrl || '',
-            short_link: invitation.shortLinkUrl || null, // Short link URL
-            status: invitation.messageStatus || 'pending', // SMS status
-            sms_sent_at: invitation.sentAt || invitation.queuedAt || '',
-            // Email fields - show actual data
-            email_status: invitation.participant?.email || 'N/A', // Show actual email address
-            email_sent_at: invitation.sentAt || invitation.queuedAt || 'N/A',  // Show actual timestamp
-            completed_at: invitation.completedAt || null, // Survey completion timestamp
-            signup_ip: invitation.participant?.signupIp || null,
-            enrollment_at: invitation.createdAt || null
-          }));
+          const convertedRecords = data.content.map((invitation: any) => {
+            const uid = invitation.participant?.linkPublicUid as string | undefined;
+            const baseLong = invitation.linkUrl || '';
+            const baseShort = normalizeShortLinkUrl(invitation.shortLinkUrl || null);
+            return {
+              id: invitation.id,
+              phone_number: invitation.participant?.phone || '',
+              email: invitation.participant?.email || '',
+              // Long: DB stores long+uid; append only for legacy rows missing uid in linkUrl.
+              assigned_link: appendParticipantUid(baseLong, uid) || '',
+              // Short: SMS uses proxy URL only (no uid); DB matches that — do not append uid in UI.
+              short_link: baseShort ? withoutUidParameter(baseShort) : null,
+              status: invitation.messageStatus || 'pending',
+              sms_sent_at: invitation.sentAt || invitation.queuedAt || '',
+              email_status: invitation.participant?.email || 'N/A',
+              email_sent_at: invitation.sentAt || invitation.queuedAt || 'N/A',
+              completed_at: invitation.completedAt || null,
+              signup_ip: invitation.participant?.signupIp || null,
+              enrollment_at: invitation.createdAt || null
+            };
+          });
           setRecords(convertedRecords);
         } else {
           setRecords([]);
@@ -1005,12 +1015,13 @@ const AdminDashboard: React.FC = () => {
                           <td className="p-2 break-words">
                             {r.short_link ? (
                               <div>
-                                <div className="mb-1">
-                                  <a 
-                                    href={r.short_link} 
-                                    target="_blank" 
+                                <div className="mb-1 text-sm">
+                                  <span className="text-xs text-gray-500">Short: </span>
+                                  <a
+                                    href={r.short_link}
+                                    target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800 underline font-medium"
+                                    className="text-blue-600 hover:text-blue-800 underline font-medium break-all"
                                   >
                                     {r.short_link}
                                   </a>
@@ -1087,6 +1098,21 @@ const AdminDashboard: React.FC = () => {
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <div className="py-1" role="menu">
+                                    <button
+                                      onClick={() => {
+                                        setDetailsInvitationId(r.id);
+                                        setShowDetailsModal(true);
+                                        setActiveActionMenu(null);
+                                      }}
+                                      className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                      role="menuitem"
+                                    >
+                                      <svg className="mr-3 h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                      View details
+                                    </button>
                                     <button
                                       onClick={() => {
                                         handleEdit(r);
@@ -1772,6 +1798,15 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
       </div>
+
+      <ParticipantInvitationDetailsModal
+        isOpen={showDetailsModal}
+        invitationId={detailsInvitationId}
+        onClose={() => {
+          setShowDetailsModal(false);
+          setDetailsInvitationId(null);
+        }}
+      />
 
       {/* Modals */}
       {showEditModal && editRecord && (
