@@ -24,7 +24,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
       >
         {label}
       </th>
-      <td className="py-2.5 text-sm text-slate-800 break-words">{value}</td>
+      <td className="min-w-0 py-2.5 text-sm text-slate-800 break-words">{value}</td>
     </tr>
   );
 }
@@ -42,7 +42,7 @@ function Section({
         <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
       </div>
       <div className="px-3 py-1">
-        <table className="w-full border-collapse">
+        <table className="w-full table-fixed border-collapse">
           <tbody>{children}</tbody>
         </table>
       </div>
@@ -53,8 +53,10 @@ function Section({
 function Copyable({ text }: { text: string }) {
   if (!text) return <span className="text-slate-400">—</span>;
   return (
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
-      <span className="font-mono text-[13px] leading-relaxed text-slate-900">{text}</span>
+    <div className="flex min-w-0 w-full max-w-full flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
+      <span className="min-w-0 flex-1 font-mono text-[13px] leading-relaxed text-slate-900 break-all">
+        {text}
+      </span>
       <button
         type="button"
         onClick={() => {
