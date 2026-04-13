@@ -55,8 +55,8 @@ public class Participant {
     private String signupIp;
 
     /**
-     * Random unique id (UUID string) for new signups only; appended as {@code &uid=} on outbound survey links.
-     * Null for participants created before this feature.
+     * Unique six-digit numeric id for new signups ({@code 000000}–{@code 999999}); appended as {@code &uid=} on survey links.
+     * Legacy rows may still hold a UUID string from an earlier release. Null for participants created before this feature.
      */
     @Column(name = "link_public_uid", length = 36, unique = true)
     private String linkPublicUid;

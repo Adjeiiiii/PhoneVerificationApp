@@ -38,6 +38,7 @@ public class SurveyServiceImpl implements SurveyService {
     private final PhoneNumberService phoneNumberService;
     private final GiftCardService giftCardService;
     private final EnrollmentService enrollmentService;
+    private final ParticipantLinkPublicUidService participantLinkPublicUidService;
 
     @Override
     @Transactional
@@ -55,12 +56,11 @@ public class SurveyServiceImpl implements SurveyService {
             final String e164 = phoneNumberService.normalizeToE164(phone);
             Participant p = participantRepository.findByPhone(e164)
                     .orElseGet(() -> {
-                        Participant np = new Participant();
-                        np.setPhone(e164);
-                        np.setStatus(ParticipantStatus.SUBSCRIBED);
-                        np.setPhoneVerified(true);
-                        np.setLinkPublicUid(UUID.randomUUID().toString());
-                        return participantRepository.save(np);
+                        Participant draft = new Participant();
+                        draft.setPhone(e164);
+                        draft.setStatus(ParticipantStatus.SUBSCRIBED);
+                        draft.setPhoneVerified(true);
+                        return participantLinkPublicUidService.insertNewParticipant(draft);
                     });
 
             if (!p.isPhoneVerified()) {

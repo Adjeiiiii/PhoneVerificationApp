@@ -196,12 +196,12 @@ const ParticipantInvitationDetailsModal: React.FC<ParticipantInvitationDetailsMo
                 />
                 <DetailRow label="Status" value={p?.status || '—'} />
                 <DetailRow
-                  label="Link public UID"
+                  label="Link public ID"
                   value={
                     p?.linkPublicUid ? (
                       <Copyable text={String(p.linkPublicUid)} />
                     ) : (
-                      <span className="text-slate-500">Not set (legacy signup)</span>
+                      <span className="text-slate-500">Not set (legacy participant)</span>
                     )
                   }
                 />

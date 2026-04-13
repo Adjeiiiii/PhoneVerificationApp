@@ -17,7 +17,6 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -27,17 +26,20 @@ public class OtpServiceImpl implements OtpService {
     private final ParticipantRepository participantRepo;
     private final PhoneValidationService phoneValidationService;
     private final EnrollmentService enrollmentService;
+    private final ParticipantLinkPublicUidService participantLinkPublicUidService;
 
     public OtpServiceImpl(
             @Value("${twilio.verifyServiceSid}") String verifyServiceSid,
             ParticipantRepository participantRepo,
             PhoneValidationService phoneValidationService,
-            EnrollmentService enrollmentService
+            EnrollmentService enrollmentService,
+            ParticipantLinkPublicUidService participantLinkPublicUidService
     ) {
         this.verifyServiceSid = verifyServiceSid;
         this.participantRepo = participantRepo;
         this.phoneValidationService = phoneValidationService;
         this.enrollmentService = enrollmentService;
+        this.participantLinkPublicUidService = participantLinkPublicUidService;
     }
 
     @Override
@@ -111,16 +113,15 @@ public class OtpServiceImpl implements OtpService {
         Optional<Participant> existingParticipant = participantRepo.findByPhone(req.getPhone());
         Participant participant = existingParticipant.orElseGet(() -> {
                 log.info("Creating new participant for verified phone: {}", req.getPhone());
-                Participant newParticipant = new Participant();
-                newParticipant.setPhone(req.getPhone());
-                newParticipant.setStatus(ParticipantStatus.SUBSCRIBED);
-                newParticipant.setPhoneVerified(true);
-                newParticipant.setVerifiedAt(OffsetDateTime.now());
-                newParticipant.setLinkPublicUid(UUID.randomUUID().toString());
+                Participant draft = new Participant();
+                draft.setPhone(req.getPhone());
+                draft.setStatus(ParticipantStatus.SUBSCRIBED);
+                draft.setPhoneVerified(true);
+                draft.setVerifiedAt(OffsetDateTime.now());
                 if (clientIp != null && !clientIp.isBlank()) {
-                    newParticipant.setSignupIp(clientIp.trim());
+                    draft.setSignupIp(clientIp.trim());
                 }
-                return participantRepo.save(newParticipant);
+                return participantLinkPublicUidService.insertNewParticipant(draft);
             });
             
             // Update participant with email and name if provided
