@@ -54,7 +54,7 @@ public class ParticipantLinkPublicUidService {
         return p;
     }
 
-    static boolean isLinkPublicUidUniqueViolation(DataIntegrityViolationException ex) {
+    private static boolean isLinkPublicUidUniqueViolation(DataIntegrityViolationException ex) {
         String msg = ex.getMostSpecificCause().getMessage();
         if (msg == null) {
             return false;
