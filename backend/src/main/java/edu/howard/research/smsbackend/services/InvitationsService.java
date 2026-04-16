@@ -68,7 +68,7 @@ public class InvitationsService {
         
         inv.setCreatedAt(OffsetDateTime.now());
         inv.setMessageStatus("pending");
-        inv.setLinkUrl(LinkUrlUtils.appendParticipantUid(claim.getLinkUrl(), participant.getLinkPublicUid()));
+        inv.setLinkUrl(LinkUrlUtils.appendParticipantUid(claim.getLinkUrl(), claim.getLinkPublicUid()));
         inv.setShortLinkUrl(claim.getShortLinkUrl());
 
         inv = inviteRepo.save(inv);

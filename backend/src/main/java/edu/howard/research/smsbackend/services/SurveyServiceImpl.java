@@ -88,7 +88,7 @@ public class SurveyServiceImpl implements SurveyService {
             linkRef.setId(linkId);
 
             // 3) create invitation — persist long URL with uid; short URL stays a proxy (no uid on SMS).
-            String storedLong = LinkUrlUtils.appendParticipantUid(linkUrl, p.getLinkPublicUid());
+            String storedLong = LinkUrlUtils.appendParticipantUid(linkUrl, claim.get().getLinkPublicUid());
             SurveyInvitation inv = new SurveyInvitation();
             inv.setParticipant(p);
             inv.setLink(linkRef);

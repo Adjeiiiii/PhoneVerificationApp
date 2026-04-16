@@ -8,6 +8,13 @@ interface LinkRecord {
   id: string; // Changed from number to string for UUIDs
   link: string;
   shortLink: string | null;
+  shortCode: string | null;
+  linkPublicUid: string | null;
+  batchLabel: string | null;
+  notes: string | null;
+  uploadedBy: string | null;
+  uploadedAt: string | null;
+  status: string | null;
   used: boolean;
   assigned_phone: string | null;
   assigned_email: string | null;
@@ -38,6 +45,8 @@ const AdminDBOps: React.FC = () => {
   // For editing a link
   const [editLink, setEditLink] = useState<LinkRecord | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [detailLink, setDetailLink] = useState<LinkRecord | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // For CSV uploads
   const [csvSuccessCount, setCsvSuccessCount] = useState<number | null>(null);
@@ -175,6 +184,13 @@ const AdminDBOps: React.FC = () => {
               id: link.id,
               link: link.linkUrl, // Map linkUrl to link
               shortLink: link.shortLinkUrl || null, // Map shortLinkUrl
+              shortCode: link.shortCode || null,
+              linkPublicUid: link.linkPublicUid || null,
+              batchLabel: link.batchLabel || null,
+              notes: link.notes || null,
+              uploadedBy: link.uploadedBy || null,
+              uploadedAt: link.uploadedAt || null,
+              status: link.status || null,
               used: isUsed, // Only truly assigned links are used
               assigned_phone: participant?.phone || null,
               assigned_email: participant?.email || null
@@ -238,9 +254,19 @@ const AdminDBOps: React.FC = () => {
     setShowEditModal(true);
   };
 
+  const handleViewDetailsClick = (l: LinkRecord) => {
+    setDetailLink({ ...l });
+    setShowDetailModal(true);
+  };
+
   const closeEditModal = () => {
     setEditLink(null);
     setShowEditModal(false);
+  };
+
+  const closeDetailModal = () => {
+    setDetailLink(null);
+    setShowDetailModal(false);
   };
 
   const handleSaveLink = () => {
@@ -366,6 +392,13 @@ const AdminDBOps: React.FC = () => {
     } else {
       setSelectedFilename('');
     }
+  };
+
+  const formatWhen = (iso: string | null) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' (ET)';
   };
 
 
@@ -713,22 +746,16 @@ const AdminDBOps: React.FC = () => {
                     <td className="p-2">{ln.assigned_phone || '—'}</td>
                     <td className="p-2">{ln.assigned_email || '—'}</td>
                     <td className="p-2">
-                      {ln.used ? (
-                        <em className="text-xs text-gray-500">
-                          Used
-                        </em>
-                      ) : (
-                        <div className="relative group">
-                          <button
-                            className="p-1 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                            onClick={(e) => toggleDropdown(ln.id, e)}
-                          >
-                            <svg className="w-5 h-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
+                      <div className="relative group">
+                        <button
+                          className="p-1 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                          onClick={(e) => toggleDropdown(ln.id, e)}
+                        >
+                          <svg className="w-5 h-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -848,6 +875,96 @@ const AdminDBOps: React.FC = () => {
                   Save Changes
               </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW DETAILS MODAL */}
+      {showDetailModal && detailLink && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeDetailModal();
+            }
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden">
+            <div className="bg-slate-800 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Link Details</h2>
+                <p className="text-slate-300 text-xs mt-0.5">Full metadata for this pool link</p>
+              </div>
+              <button
+                onClick={closeDetailModal}
+                className="text-white hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-700"
+                aria-label="Close modal"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Link ID</p>
+                  <p className="font-mono break-all text-slate-800">{detailLink.id}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Status</p>
+                  <p className="text-slate-800">{detailLink.status || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Link Public UID</p>
+                  <p className="font-mono text-slate-800">{detailLink.linkPublicUid || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Short Code</p>
+                  <p className="font-mono text-slate-800">{detailLink.shortCode || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Batch Label</p>
+                  <p className="text-slate-800">{detailLink.batchLabel || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Uploaded By</p>
+                  <p className="text-slate-800">{detailLink.uploadedBy || '—'}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Uploaded At</p>
+                  <p className="text-slate-800">{formatWhen(detailLink.uploadedAt)}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Long Link</p>
+                  <p className="font-mono break-all text-slate-800">{detailLink.link}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Short Link</p>
+                  <p className="font-mono break-all text-slate-800">{detailLink.shortLink || '—'}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Notes</p>
+                  <p className="text-slate-800 whitespace-pre-wrap">{detailLink.notes || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Assigned Phone</p>
+                  <p className="text-slate-800">{detailLink.assigned_phone || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Assigned Email</p>
+                  <p className="text-slate-800">{detailLink.assigned_email || '—'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <button
+                onClick={closeDetailModal}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm font-medium"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -1102,10 +1219,29 @@ const AdminDBOps: React.FC = () => {
                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                 onClick={() => {
                   const link = links.find(l => l.id === activeDropdownId);
-                  if (link) handleEditClick(link);
+                  if (link) handleViewDetailsClick(link);
                   setActiveDropdownId(null);
                   setDropdownPosition(null);
                 }}
+              >
+                <svg className="w-4 h-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10 3C5 3 1.73 7.11 1 10c.73 2.89 4 7 9 7s8.27-4.11 9-7c-.73-2.89-4-7-9-7zm0 11a4 4 0 110-8 4 4 0 010 8z" />
+                  <path d="M10 8a2 2 0 100 4 2 2 0 000-4z" />
+                </svg>
+                View Details
+              </button>
+              <button
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                onClick={() => {
+                  const link = links.find(l => l.id === activeDropdownId);
+                  if (link && !link.used) handleEditClick(link);
+                  setActiveDropdownId(null);
+                  setDropdownPosition(null);
+                }}
+                disabled={(() => {
+                  const link = links.find(l => l.id === activeDropdownId);
+                  return !!link?.used;
+                })()}
               >
                 <svg className="w-4 h-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
@@ -1159,20 +1295,25 @@ const AdminDBOps: React.FC = () => {
                   </>
                 );
               })()}
-              <button
-                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flex items-center"
-                onClick={() => {
-                  const link = links.find(l => l.id === activeDropdownId);
-                  if (link) handleDeleteClick(link);
-                  setActiveDropdownId(null);
-                  setDropdownPosition(null);
-                }}
-              >
-                <svg className="w-4 h-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                Delete
-              </button>
+              {(() => {
+                const link = links.find(l => l.id === activeDropdownId);
+                if (link?.used) return null;
+                return (
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flex items-center"
+                    onClick={() => {
+                      if (link) handleDeleteClick(link);
+                      setActiveDropdownId(null);
+                      setDropdownPosition(null);
+                    }}
+                  >
+                    <svg className="w-4 h-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Delete
+                  </button>
+                );
+              })()}
             </div>
           </div>,
           document.body

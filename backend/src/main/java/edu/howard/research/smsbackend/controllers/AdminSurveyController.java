@@ -23,6 +23,7 @@ import edu.howard.research.smsbackend.services.GiftCardService;
 import edu.howard.research.smsbackend.services.InvitationsService;
 import edu.howard.research.smsbackend.services.SmsService;
 import edu.howard.research.smsbackend.util.LinkUrlUtils;
+import edu.howard.research.smsbackend.util.LinkPublicUidGenerator;
 import edu.howard.research.smsbackend.util.PhoneNumberService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -52,6 +53,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class AdminSurveyController {
+    private static final int MAX_LINK_UID_ATTEMPTS = 32;
 
     private final SurveyLinkPoolRepository linkRepo;
     private final SurveyInvitationRepository inviteRepo;
@@ -91,7 +93,6 @@ public class AdminSurveyController {
             if (url.isEmpty()) continue;
 
             SurveyLinkPool row = new SurveyLinkPool();
-            row.setLinkUrl(url);
             row.setBatchLabel(req.getBatchLabel());
             row.setNotes(req.getNotes());
             row.setUploadedBy(req.getUploadedBy());
@@ -110,7 +111,7 @@ public class AdminSurveyController {
             }
 
             try {
-                linkRepo.save(row);
+                saveLinkWithUniqueUid(row, url);
                 inserted++;
             } catch (DataIntegrityViolationException e) {
                 duplicates.add(url); // unique(link_url) etc.
@@ -285,7 +286,8 @@ public class AdminSurveyController {
                 String newLink = (String) updates.get("link");
                 if (newLink != null && !newLink.trim().isEmpty()) {
                     String trimmedLink = newLink.trim();
-                    link.setLinkUrl(trimmedLink);
+                    String baseLink = LinkUrlUtils.withoutUidParameter(trimmedLink);
+                    link.setLinkUrl(LinkUrlUtils.appendParticipantUid(baseLink, link.getLinkPublicUid()));
                     
                     // Re-generate short code and URL if link changed
                     try {
@@ -493,7 +495,7 @@ public class AdminSurveyController {
         SurveyInvitation inv = new SurveyInvitation();
         inv.setParticipant(p);
         inv.setLink(link);
-        inv.setLinkUrl(LinkUrlUtils.appendParticipantUid(link.getLinkUrl(), p.getLinkPublicUid()));
+        inv.setLinkUrl(LinkUrlUtils.appendParticipantUid(link.getLinkUrl(), link.getLinkPublicUid()));
         inv.setShortLinkUrl(link.getShortLinkUrl());
         inv.setCreatedAt(OffsetDateTime.now());
         inv.setMessageStatus("pending");
@@ -1139,5 +1141,43 @@ public class AdminSurveyController {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Failed to delete link: " + e.getMessage()));
         }
+    }
+
+    private void saveLinkWithUniqueUid(SurveyLinkPool row, String rawUrl) {
+        DataIntegrityViolationException lastUidConflict = null;
+        String baseUrl = LinkUrlUtils.withoutUidParameter(rawUrl);
+
+        for (int attempt = 0; attempt < MAX_LINK_UID_ATTEMPTS; attempt++) {
+            String linkUid = LinkPublicUidGenerator.generateSixDigitNumeric();
+            if (linkRepo.existsByLinkPublicUid(linkUid)) {
+                continue;
+            }
+            row.setLinkPublicUid(linkUid);
+            row.setLinkUrl(LinkUrlUtils.appendParticipantUid(baseUrl, linkUid));
+
+            try {
+                linkRepo.saveAndFlush(row);
+                return;
+            } catch (DataIntegrityViolationException ex) {
+                if (!isLinkUidConflict(ex)) {
+                    throw ex;
+                }
+                lastUidConflict = ex;
+            }
+        }
+
+        throw new IllegalStateException(
+                "Could not allocate unique 6-digit link_public_uid after " + MAX_LINK_UID_ATTEMPTS + " attempts",
+                lastUidConflict
+        );
+    }
+
+    private static boolean isLinkUidConflict(DataIntegrityViolationException ex) {
+        String msg = ex.getMostSpecificCause() == null ? ex.getMessage() : ex.getMostSpecificCause().getMessage();
+        if (msg == null) {
+            return false;
+        }
+        return msg.contains("uq_linkpool_link_public_uid")
+                || (msg.contains("link_public_uid") && (msg.contains("unique") || msg.contains("duplicate key")));
     }
 }

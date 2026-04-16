@@ -12,10 +12,12 @@ import java.util.UUID;
         name = "survey_link_pool",
         indexes = {
                 @Index(name = "idx_linkpool_status", columnList = "status"),
-                @Index(name = "idx_linkpool_batch",  columnList = "batch_label")
+                @Index(name = "idx_linkpool_batch",  columnList = "batch_label"),
+                @Index(name = "idx_linkpool_public_uid", columnList = "link_public_uid")
         },
         uniqueConstraints = {
-                @UniqueConstraint(name = "uq_linkpool_link_url", columnNames = "link_url")
+                @UniqueConstraint(name = "uq_linkpool_link_url", columnNames = "link_url"),
+                @UniqueConstraint(name = "uq_linkpool_link_public_uid", columnNames = "link_public_uid")
         }
 )
 public class SurveyLinkPool {
@@ -31,6 +33,9 @@ public class SurveyLinkPool {
 
     @Column(name = "link_url", nullable = false)
     private String linkUrl;
+
+    @Column(name = "link_public_uid", nullable = false, length = 6)
+    private String linkPublicUid;
 
     @Column(name = "short_link_url")
     private String shortLinkUrl;
@@ -70,6 +75,9 @@ public class SurveyLinkPool {
 
     public String getLinkUrl() { return linkUrl; }
     public void setLinkUrl(String linkUrl) { this.linkUrl = linkUrl; }
+
+    public String getLinkPublicUid() { return linkPublicUid; }
+    public void setLinkPublicUid(String linkPublicUid) { this.linkPublicUid = linkPublicUid; }
 
     public String getShortLinkUrl() { return shortLinkUrl; }
     public void setShortLinkUrl(String shortLinkUrl) { this.shortLinkUrl = shortLinkUrl; }
